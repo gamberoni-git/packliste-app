@@ -1,6 +1,6 @@
 // Persistenz (localStorage) und Datenzugriff
 const STORAGE_KEY = 'packlist_v1';
-const APP_VERSION = '0.2.0';
+const APP_VERSION = '0.3.0';
 
 function defaultState() {
   return {
@@ -13,6 +13,10 @@ function defaultState() {
     custom: { tripTypes: [], transport: [], luggage: [], activities: [] },
     // Anpassungen an Standard-Kacheln: key -> {name?, icon?, hidden?}
     overrides: { tripTypes: {}, transport: {}, luggage: {}, activities: {} },
+    // Manuell korrigierte Gewichte (dauerhaft): itemKey -> Gramm
+    weights: {},
+    // Manuell korrigierte Gepäck-Leergewichte: luggageKey -> Gramm
+    luggageWeights: {},
     // Packlisten
     lists: [],
   };
@@ -151,6 +155,39 @@ function tripDays(list) {
     return d > 0 ? d : 1;
   }
   return null;
+}
+
+// ---- Gewichtsschätzung ----
+// Gewicht eines Listen-Artikels in Gramm pro Stück:
+// Listen-Override > gespeicherte Korrektur > Custom-Artikel > Annahme
+function itemWeight(li) {
+  if (li.w != null) return li.w;
+  if (li.k) {
+    if (state.weights[li.k] != null) return state.weights[li.k];
+    const ci = state.customItems.find(c => c.id === li.k);
+    if (ci && ci.w != null) return ci.w;
+    if (ITEM_WEIGHT[li.k] != null) return ITEM_WEIGHT[li.k];
+  }
+  return ITEM_WEIGHT_FALLBACK;
+}
+
+// Leergewicht eines Gepäckstücks in Gramm
+function luggageWeight(key) {
+  if (state.luggageWeights[key] != null) return state.luggageWeights[key];
+  const c = state.custom.luggage.find(x => x.id === key);
+  if (c && c.w != null) return c.w;
+  return LUGGAGE_WEIGHT[key] != null ? LUGGAGE_WEIGHT[key] : LUGGAGE_WEIGHT_FALLBACK;
+}
+
+// Gesamtgewicht einer Liste: {items, luggage, total} in Gramm
+function listWeights(list) {
+  const items = list.items.reduce((s, li) => s + itemWeight(li) * li.q, 0);
+  const luggage = (list.luggage || []).reduce((s, k) => s + luggageWeight(k), 0);
+  return { items, luggage, total: items + luggage };
+}
+
+function fmtKg(g) {
+  return (g / 1000).toFixed(1).replace('.', state.settings.lang === 'en' ? '.' : ',') + ' kg';
 }
 
 // ---- Final Check ----

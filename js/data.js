@@ -265,6 +265,52 @@ const CLIMATE = {
   schnee:    { de: 'Schnee', en: 'Snow', icon: '❄️', items: ['muetze','handschuhe','schal','thermounterwaesche'] },
 };
 
+// Gewichts-Annahmen pro Artikel in Gramm (pro Stück, manuell korrigierbar)
+const ITEM_WEIGHT = {
+  reisepass: 50, idkarte: 10, fuehrerschein: 10, kreditkarte: 10, bargeld: 50,
+  tickets: 20, buchungen: 50, versicherungskarte: 10, impfausweis: 50,
+  unterhosen: 80, socken: 60, tshirts: 150, hemden: 250, hosen_lang: 450, jeans: 600,
+  shorts: 250, pullover: 450, pyjama: 300, guertel: 150, badehose: 150,
+  funktionsshirts: 130, wandersocken: 80, laufsocken: 50, running_hose: 120,
+  running_shirt: 120, radhose: 200, radtrikot: 150, thermounterwaesche: 250,
+  skisocken: 90, business_hemden: 250, anzug: 1200, krawatte: 80, blazer: 800,
+  sneakers: 700, wanderschuhe: 1200, laufschuhe: 550, sandalen: 400, flipflops: 300,
+  business_schuhe: 900, skischuhe: 4000, radschuhe: 700, huettenschuhe: 300,
+  regenjacke: 350, daunenjacke: 450, fleecejacke: 400, softshell: 500,
+  skijacke: 900, skihose: 800, windweste: 150, mantel: 1200,
+  zahnbuerste: 20, zahnpasta: 100, deo: 150, duschgel: 250, shampoo: 250,
+  rasierer: 100, sonnencreme: 200, after_sun: 200, kontaktlinsen: 50,
+  linsenmittel: 350, nagelset: 150, ohrstoepsel: 10, taschentuecher: 100,
+  labello: 20, haarbuerste: 100,
+  medis: 200, schmerzmittel: 50, pflaster: 50, blasenpflaster: 30,
+  desinfektion: 100, insektenschutz: 150, reisetabletten: 30, durchfallmittel: 30, elektrolyte: 100,
+  handy_ladekabel: 100, powerbank: 350, adapter: 120, kopfhoerer: 250, laptop: 2000,
+  tablet: 600, kamera: 800, kamera_zubehoer: 200, ebook_reader: 200,
+  smartwatch_kabel: 50, steckerleiste: 300, auto_ladekabel: 100,
+  taschenmesser: 100, stirnlampe: 100, fernglas: 700, packwuerfel: 300,
+  waeschebeutel: 100, reisekissen: 300, schlafmaske: 30, trinkflasche: 150,
+  thermosflasche: 400, vorhaengeschloss: 100, regenschirm: 350, sonnenbrille: 50,
+  buch: 350, zeitschriften: 300, spiele: 300, kartenspiel: 100, reisefuehrer: 400, tagebuch: 250,
+  laufuhr: 50, laufgurt: 150, gels: 60, startnummernband: 50, wanderstoecke: 500,
+  rucksack_regenhuelle: 120, wanderkarte: 100, erste_hilfe: 300, schlafsack_huette: 350,
+  tauchcomputer: 150, maske_schnorchel: 700, flossen: 1800, neoprenanzug: 3000,
+  tauchschein: 50, schwimmbrille: 80, velohelm: 300, radhandschuhe: 80,
+  radbrille: 40, flickzeug: 250, veloschloss: 800, velolicht: 150,
+  badetuch: 500, strandtasche: 300, sonnenhut: 100, luftmatratze: 1500, kuehltasche: 600,
+  muetze: 80, handschuhe: 120, schal: 150, skihandschuhe: 200, skibrille: 200,
+  skihelm: 500, handwaermer: 40, felle: 600, lvs: 250, schaufel_sonde: 900,
+  tourenstoecke: 550, harscheisen: 300,
+  schluessel: 80, snacks: 300, waschmittel: 150, zip_beutel: 50, muellsack: 60, daypack_item: 300,
+};
+const ITEM_WEIGHT_FALLBACK = 150; // Annahme für unbekannte / eigene Artikel
+
+// Leergewichte der Gepäckstücke in Gramm
+const LUGGAGE_WEIGHT = {
+  koffer_gross: 4800, koffer_mittel: 3800, koffer_klein: 2900, handgepaeck: 2600,
+  trekking_rucksack: 2000, daypack: 900, sporttasche: 1300, skisack: 2000, velokoffer: 8500,
+};
+const LUGGAGE_WEIGHT_FALLBACK = 2000;
+
 // Final Check: kritische Artikel, die je nach Kontext nicht fehlen dürfen
 const CRITICAL = {
   always: ['medis', 'zahnbuerste', 'handy_ladekabel', 'kreditkarte'],

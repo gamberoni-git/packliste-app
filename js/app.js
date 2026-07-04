@@ -65,6 +65,7 @@ function render() {
     case 'list': renderList(); break;
     case 'pack': renderPack(); break;
     case 'return': renderReturn(); break;
+    case 'weight': renderWeight(); break;
     case 'catalog': renderCatalog(); break;
     case 'settings': renderSettings(); break;
   }
@@ -399,6 +400,7 @@ function renderList() {
   html += `<button class="btn secondary" data-act="add-item">＋ ${t('addItem')}</button>
     <button class="btn secondary" data-act="add-cat">＋ ${t('addCategory')}</button>
     <button class="btn secondary" data-act="final-check">🔍 ${t('finalCheck')}</button>
+    <button class="btn secondary" data-act="weight-view" data-id="${list.id}">⚖️ ${t('weight')} (${fmtKg(listWeights(list).total)})</button>
     <div style="height:10px"></div>
     <div class="bottombar"><button class="btn" data-act="pack-mode">🎒 ${t('packMode')} (${packed}/${total})</button></div>`;
   $app.innerHTML = html;
@@ -776,6 +778,105 @@ function renderReturn() {
   $app.innerHTML = html;
 }
 
+// ---------------- Gewichtsschätzung ----------------
+function renderWeight() {
+  const list = getList(view.id);
+  if (!list) return go({ name: 'home' });
+  const w = listWeights(list);
+  let html = `<div class="topbar">
+    <button class="iconbtn" data-act="back-to-list" data-id="${list.id}">←</button>
+    <div style="flex:1;min-width:0"><h1>⚖️ ${t('weightEstimate')}</h1>
+    <div class="sub">${esc(list.name)}</div></div>
+  </div>
+  <div class="card" style="cursor:default">
+    <div style="display:flex;justify-content:space-between;font-size:15px;margin-bottom:4px">
+      <span>${t('itemsWeight')}</span><b>${fmtKg(w.items)}</b></div>
+    <div style="display:flex;justify-content:space-between;font-size:15px;margin-bottom:4px">
+      <span>${t('luggageTare')}</span><b>${fmtKg(w.luggage)}</b></div>
+    <div style="display:flex;justify-content:space-between;font-size:18px;border-top:1px solid var(--border);padding-top:8px;margin-top:8px">
+      <b>${t('totalWeight')}</b><b style="color:var(--accent)">${fmtKg(w.total)}</b></div>
+  </div>`;
+  // Flug-Hinweis und Limiten-Warnung
+  if ((list.transport || []).includes('flugzeug')) {
+    const over = list.bagOption === 'carryon' ? (w.total > 10000 ? t('overCarryOn') : '') : (w.total > 23000 ? t('overChecked') : '');
+    if (over) html += `<div class="banner"><b>⚠️ ${over}</b><br>${t('flightLimits')}</div>`;
+    else html += `<div class="banner info">✈️ ${t('flightLimits')}</div>`;
+  }
+  html += `<div class="wiz-hint">${t('weightHint')}</div>`;
+  // Gepäckstücke (Leergewicht)
+  if ((list.luggage || []).length) {
+    html += `<div class="cat-section"><div class="cat-head">🧳 ${t('luggageTare')}</div>`;
+    for (const key of list.luggage) {
+      const info = tileInfo('luggage', key);
+      html += `<div class="item" data-act="edit-lug-weight" data-key="${key}" style="cursor:pointer">
+        <span style="font-size:20px">${info ? info.icon : '🧳'}</span>
+        <div class="name">${info ? esc(info.label) : esc(key)}</div>
+        <b style="font-size:14px">${fmtKg(luggageWeight(key))}</b>
+      </div>`;
+    }
+    html += '</div>';
+  }
+  // Artikel nach Kategorie
+  for (const g of groupByCat(list.items)) {
+    const sub = g.items.reduce((s, li) => s + itemWeight(li) * li.q, 0);
+    html += `<div class="cat-section"><div class="cat-head">${catIcon(g.cat)} ${esc(catName(g.cat))} <span class="count">${fmtKg(sub)}</span></div>`;
+    for (const it of g.items) {
+      const wg = itemWeight(it);
+      html += `<div class="item" data-act="edit-weight" data-id="${it.id}" style="cursor:pointer">
+        <div class="name">${esc(listItemName(it))}</div>
+        <span style="font-size:13px;color:var(--text-soft)">${it.q > 1 ? it.q + ' × ' + wg + ' g' : wg + ' g'}</span>
+        <b style="font-size:14px;min-width:60px;text-align:right">${fmtKg(wg * it.q)}</b>
+      </div>`;
+    }
+    html += `</div>`;
+  }
+  $app.innerHTML = html;
+}
+
+function weightEditModal(listId, itemId) {
+  const list = getList(listId);
+  const it = list.items.find(i => i.id === itemId);
+  if (!it) return;
+  showModal(`<h3>⚖️ ${t('editWeight')}</h3>
+    <div class="wiz-hint">${esc(listItemName(it))}</div>
+    <div class="field"><label>${t('gramsPerPiece')}</label>
+      <input id="we-g" type="number" min="0" step="10" value="${itemWeight(it)}" inputmode="numeric"></div>
+    <div class="field"><label><input type="checkbox" id="we-persist" style="width:auto" checked> ${t('persistWeight')}</label></div>
+    <button class="btn" data-act="weight-save" data-list="${listId}" data-id="${itemId}">${t('save')}</button>
+    <button class="btn secondary" data-act="close-modal">${t('cancel')}</button>`);
+}
+
+function saveWeight(listId, itemId) {
+  const list = getList(listId);
+  const it = list.items.find(i => i.id === itemId);
+  const g = Math.max(0, parseInt(document.getElementById('we-g').value, 10) || 0);
+  it.w = g;
+  if (document.getElementById('we-persist').checked && it.k) {
+    const ci = state.customItems.find(c => c.id === it.k);
+    if (ci) ci.w = g;
+    else state.weights[it.k] = g;
+  }
+  saveState(); closeModal(); render();
+}
+
+function luggageWeightModal(listId, key) {
+  const info = tileInfo('luggage', key);
+  showModal(`<h3>⚖️ ${t('editWeight')}</h3>
+    <div class="wiz-hint">${info ? esc(info.label) : esc(key)} (${t('luggageTare').toLowerCase()})</div>
+    <div class="field"><label>${t('grams')}</label>
+      <input id="we-g" type="number" min="0" step="100" value="${luggageWeight(key)}" inputmode="numeric"></div>
+    <button class="btn" data-act="lug-weight-save" data-key="${key}">${t('save')}</button>
+    <button class="btn secondary" data-act="close-modal">${t('cancel')}</button>`);
+}
+
+function saveLuggageWeight(key) {
+  const g = Math.max(0, parseInt(document.getElementById('we-g').value, 10) || 0);
+  const c = state.custom.luggage.find(x => x.id === key);
+  if (c) c.w = g;
+  else state.luggageWeights[key] = g;
+  saveState(); closeModal(); render();
+}
+
 // ---------------- Katalog (Meine Artikel) ----------------
 function renderCatalog() {
   let html = `<div class="topbar">
@@ -1002,6 +1103,12 @@ document.addEventListener('click', e => {
     case 'fc-add-all':
       finalCheckMissing(getList(el.dataset.list)).forEach(k => fcAddItem(el.dataset.list, k));
       finalCheckModal(el.dataset.list); toast(t('added')); break;
+    // Gewicht
+    case 'weight-view': closeModal(); go({ name: 'weight', id }); break;
+    case 'edit-weight': weightEditModal(view.id, id); break;
+    case 'weight-save': saveWeight(el.dataset.list, id); break;
+    case 'edit-lug-weight': luggageWeightModal(view.id, key); break;
+    case 'lug-weight-save': saveLuggageWeight(key); break;
     // Rückreise-Checkliste
     case 'return-check': closeModal(); go({ name: 'return', id }); break;
     case 'toggle-return': {
