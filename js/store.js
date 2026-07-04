@@ -1,6 +1,6 @@
 // Persistenz (localStorage) und Datenzugriff
 const STORAGE_KEY = 'packlist_v1';
-const APP_VERSION = '0.5.0';
+const APP_VERSION = '0.5.1';
 
 function defaultState() {
   return {

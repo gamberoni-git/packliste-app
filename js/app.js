@@ -66,6 +66,7 @@ function render() {
     case 'pack': renderPack(); break;
     case 'return': renderReturn(); break;
     case 'weight': renderWeight(); break;
+    case 'addresses': renderAddresses(); break;
     case 'review': renderReview(); break;
     case 'safe': renderSafe(); break;
     case 'catalog': renderCatalog(); break;
@@ -697,7 +698,9 @@ function saveNewCat() {
 
 // ---------------- List-Menü / Teilen ----------------
 function listMenuModal(listId) {
-  showModal(`<h3>${esc(getList(listId).name)}</h3>
+  const list = getList(listId);
+  showModal(`<h3>${esc(list.name)}</h3>
+    <button class="btn secondary" data-act="addresses-view" data-id="${listId}">📍 ${t('addresses')}${(list.addresses || []).length ? ' (' + list.addresses.length + ')' : ''}</button>
     <button class="btn secondary" data-act="rename-list" data-id="${listId}">✏️ ${t('rename')}</button>
     <button class="btn secondary" data-act="duplicate-list" data-id="${listId}">📋 ${t('duplicate')}</button>
     <button class="btn secondary" data-act="share-list" data-id="${listId}">📤 ${t('share')}</button>
@@ -936,6 +939,45 @@ function saveLuggageWeight(key) {
   saveState(); closeModal(); render();
 }
 
+// ---------------- Adressen (pro Packliste, unverschlüsselt) ----------------
+function renderAddresses() {
+  const list = getList(view.id);
+  if (!list) return go({ name: 'home' });
+  list.addresses = list.addresses || [];
+  let html = `<div class="topbar">
+    <button class="iconbtn" data-act="back-to-list" data-id="${list.id}">←</button>
+    <div style="flex:1;min-width:0"><h1>📍 ${t('addresses')}</h1>
+    <div class="sub">${esc(list.name)}</div></div>
+  </div>
+  <button class="btn" data-act="addr-add">＋ ${t('addAddress')}</button>`;
+  if (!list.addresses.length) {
+    html += `<div class="empty"><span class="emoji">📍</span>${t('addressesEmpty')}</div>`;
+  }
+  for (const a of list.addresses) {
+    const q = encodeURIComponent(a.address || '');
+    html += `<div class="item" style="flex-wrap:wrap">
+      <span style="font-size:20px">📍</span>
+      <div class="name" data-act="addr-edit" data-id="${a.id}" style="cursor:pointer">${esc(a.name)}<br>
+        <span style="font-size:12px;color:var(--text-soft)">${esc(a.address || '')}</span></div>
+      <button class="del" data-act="addr-del" data-id="${a.id}">✕</button>
+      <div style="width:100%;display:flex;gap:8px;margin-top:6px">
+        <a class="btn small secondary" style="flex:1;text-decoration:none" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">🗺️ Google Maps</a>
+        <a class="btn small secondary" style="flex:1;text-decoration:none" href="https://maps.apple.com/?q=${q}" target="_blank" rel="noopener"> Apple Maps</a>
+      </div>
+    </div>`;
+  }
+  $app.innerHTML = html;
+}
+
+function addressModal(list, addr) {
+  showModal(`<h3>📍 ${addr ? t('editEntry') : t('addAddress')}</h3>
+    <div class="field"><label>${t('tileName')}</label><input id="ad-name" type="text" value="${esc(addr ? addr.name : '')}"></div>
+    <div class="field"><label>${t('addressText')}</label>
+      <textarea id="ad-text" rows="3" placeholder="${t('addressPh')}">${esc(addr ? addr.address : '')}</textarea></div>
+    <button class="btn" data-act="addr-save" ${addr ? `data-id="${addr.id}"` : ''}>${t('save')}</button>
+    <button class="btn secondary" data-act="close-modal">${t('cancel')}</button>`);
+}
+
 // ---------------- Reise-Feedback (Lern-Funktion) ----------------
 let reviewState = null; // {listId, missing: [keys], unused: [itemIds]}
 
@@ -1071,7 +1113,6 @@ async function renderSafe() {
   html += `<div style="display:flex;gap:8px">
     <button class="btn secondary" style="flex:1" data-act="safe-file-trigger">📷 ${t('addFile')}</button>
     <button class="btn secondary" style="flex:1" data-act="safe-note">📝 ${t('addNote')}</button>
-    <button class="btn secondary" style="flex:1" data-act="safe-address">📍 ${t('addAddress')}</button>
   </div>
   <input type="file" id="safe-file" accept="image/*,.pdf,application/pdf" multiple hidden>`;
 
@@ -1417,6 +1458,25 @@ document.addEventListener('click', e => {
       finalCheckModal(el.dataset.list); toast(t('added')); break;
     // Adapter
     case 'add-adapter': fcAddItem(view.id, 'adapter'); render(); toast(t('added')); break;
+    // Adressen
+    case 'addresses-view': closeModal(); go({ name: 'addresses', id }); break;
+    case 'addr-add': addressModal(list); break;
+    case 'addr-edit': addressModal(list, list.addresses.find(a => a.id === id)); break;
+    case 'addr-save': {
+      const name = document.getElementById('ad-name').value.trim();
+      const text = document.getElementById('ad-text').value.trim();
+      if (!name || !text) break;
+      list.addresses = list.addresses || [];
+      if (id) {
+        const a = list.addresses.find(x => x.id === id);
+        if (a) { a.name = name; a.address = text; }
+      } else {
+        list.addresses.push({ id: uid(), name, address: text });
+      }
+      saveState(); closeModal(); render(); toast(t('saved'));
+      break;
+    }
+    case 'addr-del': list.addresses = list.addresses.filter(a => a.id !== id); saveState(); render(); break;
     // Lern-Funktion
     case 'review-start': reviewState = null; go({ name: 'review', id }); break;
     case 'review-dismiss': getList(id).reviewed = true; saveState(); render(); break;
@@ -1461,7 +1521,6 @@ document.addEventListener('click', e => {
       break;
     case 'safe-file-trigger': document.getElementById('safe-file').click(); break;
     case 'safe-note': safeEntryModal('note'); break;
-    case 'safe-address': safeEntryModal('address'); break;
     case 'safe-entry-save': {
       const name = document.getElementById('se-name').value.trim();
       const text = document.getElementById('se-text').value.trim();
