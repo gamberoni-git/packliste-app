@@ -372,20 +372,62 @@ const RETURN_CHECKS = {
   tickets_rueck: { de: 'Tickets für die Rückreise bereit', en: 'Return tickets ready', cond: 'zug' },
 };
 
-// Länder (Auswahl für Settings, Basis für spätere Adapter-Hinweise)
-const COUNTRIES = ['CH','DE','AT','FR','IT','ES','PT','GB','US','other'];
-const COUNTRY_NAMES = {
-  CH: { de: 'Schweiz', en: 'Switzerland' },
-  DE: { de: 'Deutschland', en: 'Germany' },
-  AT: { de: 'Österreich', en: 'Austria' },
-  FR: { de: 'Frankreich', en: 'France' },
-  IT: { de: 'Italien', en: 'Italy' },
-  ES: { de: 'Spanien', en: 'Spain' },
-  PT: { de: 'Portugal', en: 'Portugal' },
-  GB: { de: 'Grossbritannien', en: 'United Kingdom' },
-  US: { de: 'USA', en: 'United States' },
-  other: { de: 'Anderes Land', en: 'Other country' },
+// Länder mit Steckertypen und Netzspannung (für Adapter-Hinweis)
+const PLUG_COUNTRIES = {
+  CH: { de: 'Schweiz', en: 'Switzerland', plugs: ['C', 'J'], volt: 230 },
+  DE: { de: 'Deutschland', en: 'Germany', plugs: ['C', 'F'], volt: 230 },
+  AT: { de: 'Österreich', en: 'Austria', plugs: ['C', 'F'], volt: 230 },
+  FR: { de: 'Frankreich', en: 'France', plugs: ['C', 'E'], volt: 230 },
+  IT: { de: 'Italien', en: 'Italy', plugs: ['C', 'F', 'L'], volt: 230 },
+  ES: { de: 'Spanien', en: 'Spain', plugs: ['C', 'F'], volt: 230 },
+  PT: { de: 'Portugal', en: 'Portugal', plugs: ['C', 'F'], volt: 230 },
+  NL: { de: 'Niederlande', en: 'Netherlands', plugs: ['C', 'F'], volt: 230 },
+  BE: { de: 'Belgien', en: 'Belgium', plugs: ['C', 'E'], volt: 230 },
+  DK: { de: 'Dänemark', en: 'Denmark', plugs: ['C', 'F', 'K'], volt: 230 },
+  SE: { de: 'Schweden', en: 'Sweden', plugs: ['C', 'F'], volt: 230 },
+  NO: { de: 'Norwegen', en: 'Norway', plugs: ['C', 'F'], volt: 230 },
+  FI: { de: 'Finnland', en: 'Finland', plugs: ['C', 'F'], volt: 230 },
+  PL: { de: 'Polen', en: 'Poland', plugs: ['C', 'E'], volt: 230 },
+  CZ: { de: 'Tschechien', en: 'Czechia', plugs: ['C', 'E'], volt: 230 },
+  HU: { de: 'Ungarn', en: 'Hungary', plugs: ['C', 'F'], volt: 230 },
+  GR: { de: 'Griechenland', en: 'Greece', plugs: ['C', 'F'], volt: 230 },
+  HR: { de: 'Kroatien', en: 'Croatia', plugs: ['C', 'F'], volt: 230 },
+  TR: { de: 'Türkei', en: 'Turkey', plugs: ['C', 'F'], volt: 230 },
+  GB: { de: 'Grossbritannien', en: 'United Kingdom', plugs: ['G'], volt: 230 },
+  IE: { de: 'Irland', en: 'Ireland', plugs: ['G'], volt: 230 },
+  US: { de: 'USA', en: 'United States', plugs: ['A', 'B'], volt: 120 },
+  CA: { de: 'Kanada', en: 'Canada', plugs: ['A', 'B'], volt: 120 },
+  MX: { de: 'Mexiko', en: 'Mexico', plugs: ['A', 'B'], volt: 127 },
+  BR: { de: 'Brasilien', en: 'Brazil', plugs: ['C', 'N'], volt: 127 },
+  AR: { de: 'Argentinien', en: 'Argentina', plugs: ['C', 'I'], volt: 220 },
+  CL: { de: 'Chile', en: 'Chile', plugs: ['C', 'L'], volt: 220 },
+  JP: { de: 'Japan', en: 'Japan', plugs: ['A', 'B'], volt: 100 },
+  CN: { de: 'China', en: 'China', plugs: ['A', 'C', 'I'], volt: 220 },
+  HK: { de: 'Hongkong', en: 'Hong Kong', plugs: ['G'], volt: 220 },
+  KR: { de: 'Südkorea', en: 'South Korea', plugs: ['C', 'F'], volt: 220 },
+  TW: { de: 'Taiwan', en: 'Taiwan', plugs: ['A', 'B'], volt: 110 },
+  TH: { de: 'Thailand', en: 'Thailand', plugs: ['A', 'B', 'C', 'O'], volt: 230 },
+  VN: { de: 'Vietnam', en: 'Vietnam', plugs: ['A', 'C', 'F'], volt: 220 },
+  ID: { de: 'Indonesien', en: 'Indonesia', plugs: ['C', 'F'], volt: 230 },
+  MY: { de: 'Malaysia', en: 'Malaysia', plugs: ['G'], volt: 240 },
+  SG: { de: 'Singapur', en: 'Singapore', plugs: ['G'], volt: 230 },
+  PH: { de: 'Philippinen', en: 'Philippines', plugs: ['A', 'B', 'C'], volt: 220 },
+  IN: { de: 'Indien', en: 'India', plugs: ['C', 'D', 'M'], volt: 230 },
+  LK: { de: 'Sri Lanka', en: 'Sri Lanka', plugs: ['D', 'G', 'M'], volt: 230 },
+  MV: { de: 'Malediven', en: 'Maldives', plugs: ['C', 'D', 'G'], volt: 230 },
+  AE: { de: 'V.A. Emirate', en: 'United Arab Emirates', plugs: ['G'], volt: 230 },
+  IL: { de: 'Israel', en: 'Israel', plugs: ['C', 'H'], volt: 230 },
+  EG: { de: 'Ägypten', en: 'Egypt', plugs: ['C', 'F'], volt: 220 },
+  MA: { de: 'Marokko', en: 'Morocco', plugs: ['C', 'E'], volt: 220 },
+  ZA: { de: 'Südafrika', en: 'South Africa', plugs: ['C', 'M', 'N'], volt: 230 },
+  KE: { de: 'Kenia', en: 'Kenya', plugs: ['G'], volt: 240 },
+  AU: { de: 'Australien', en: 'Australia', plugs: ['I'], volt: 230 },
+  NZ: { de: 'Neuseeland', en: 'New Zealand', plugs: ['I'], volt: 230 },
 };
+
+// Abwärtskompatibilität: Settings-Länderliste basiert auf PLUG_COUNTRIES
+const COUNTRIES = Object.keys(PLUG_COUNTRIES);
+const COUNTRY_NAMES = PLUG_COUNTRIES;
 
 // Spezifische Emojis pro Artikel (Fallback: Kategorie-Icon)
 const ITEM_EMOJI = {

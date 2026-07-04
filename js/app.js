@@ -66,6 +66,7 @@ function render() {
     case 'pack': renderPack(); break;
     case 'return': renderReturn(); break;
     case 'weight': renderWeight(); break;
+    case 'safe': renderSafe(); break;
     case 'catalog': renderCatalog(); break;
     case 'settings': renderSettings(); break;
   }
@@ -75,6 +76,7 @@ function render() {
 function renderHome() {
   let html = `<div class="topbar">
     <h1>🧳 ${t('appName')}</h1>
+    <button class="iconbtn" data-act="safe" title="${t('docSafe')}">🔐</button>
     <button class="iconbtn" data-act="catalog" title="${t('myItems')}">👕</button>
     <button class="iconbtn" data-act="settings" title="${t('settings')}">⚙️</button>
   </div>`;
@@ -103,7 +105,7 @@ const WIZ_STEPS = ['type', 'details', 'transport', 'luggage', 'climate', 'activi
 function startWizard() {
   const now = new Date();
   wiz = {
-    step: 0, tripType: null, dest: '', dateFrom: '', dateTo: '', name: '',
+    step: 0, tripType: null, dest: '', destCountry: '', dateFrom: '', dateTo: '', name: '',
     transport: [], luggage: [], bagOption: 'carryon', climate: [], activities: [],
     calY: now.getFullYear(), calM: now.getMonth(),
   };
@@ -193,9 +195,14 @@ function renderWizard() {
     html += `<div class="wiz-title">${t('wizTripType')}</div><div class="wiz-hint">${t('wizTripTypeHint')}</div>`;
     html += editableTilesHtml('tripTypes', wiz.tripType, 'wiz-type', false);
   } else if (step === 'details') {
+    const cname = c => state.settings.lang === 'en' ? PLUG_COUNTRIES[c].en : PLUG_COUNTRIES[c].de;
+    const codes = Object.keys(PLUG_COUNTRIES).sort((a, b) => cname(a).localeCompare(cname(b)));
     html += `<div class="wiz-title">${t('wizDetails')}</div>
       <div class="field"><label>${t('wizDest')}</label>
         <input id="w-dest" type="text" placeholder="${t('wizDestPh')}" value="${esc(wiz.dest)}"></div>
+      <div class="field"><label>${t('destCountry')}</label>
+        <select id="w-country"><option value="">${t('noCountry')}</option>
+        ${codes.map(c => `<option value="${c}" ${c === wiz.destCountry ? 'selected' : ''}>${esc(cname(c))}</option>`).join('')}</select></div>
       ${calendarHtml()}
       <div class="field"><label>${t('wizListName')}</label>
         <input id="w-name" type="text" value="${esc(wiz.name)}" placeholder="${esc(defaultListName())}"></div>`;
@@ -242,6 +249,7 @@ function wizReadDetails() {
   if (!g('w-dest')) return;
   wiz.dest = g('w-dest').value.trim();
   wiz.name = g('w-name').value.trim();
+  wiz.destCountry = g('w-country') ? g('w-country').value : wiz.destCountry;
 }
 
 function wizNext() {
@@ -253,6 +261,7 @@ function wizNext() {
     id: uid(),
     name: wiz.name || defaultListName(),
     dest: wiz.dest,
+    destCountry: wiz.destCountry || null,
     dateFrom: wiz.dateFrom, dateTo: wiz.dateTo,
     days: null,
     tripType: wiz.tripType,
@@ -380,6 +389,15 @@ function renderList() {
     <span><i style="background:var(--prio2)"></i>${t('prio2')}</span>
     <span><i style="background:var(--prio3)"></i>${t('prio3')}</span>
   </div>`;
+  // Adapter-Hinweis, wenn Ziel-Land bekannt
+  const ad = adapterInfo(list);
+  if (ad) {
+    const cls = ad.status === 'needed' ? '' : 'info';
+    const msg = ad.status === 'needed' ? t('adapterNeeded') : ad.status === 'maybe' ? t('adapterMaybe') : t('adapterNotNeeded');
+    const hasAdapter = list.items.some(i => i.k === 'adapter');
+    html += `<div class="banner ${cls}">🔌 <b>${esc(ad.country)}</b>: ${t('sockets')} ${ad.plugs} · ${ad.volt} V — <b>${msg}</b>
+      ${ad.status !== 'no' && !hasAdapter ? `<br><button class="btn small" style="margin-top:8px" data-act="add-adapter">＋ ${t('addAdapterBtn')}</button>` : ''}</div>`;
+  }
   for (const g of groupByCat(list.items)) {
     html += `<div class="cat-section"><div class="cat-head">${catIcon(g.cat)} ${esc(catName(g.cat))} <span class="count">(${g.items.length})</span>
       <button class="cat-add" data-act="add-item-cat" data-cat="${g.cat}" title="${t('addItem')}">＋</button></div>`;
@@ -437,6 +455,21 @@ function fcAddItem(listId, key) {
     q: computeQty(def[3], tripDays(list)), p: def[4], lm: false, packed: false,
   });
   saveState();
+}
+
+// Braucht es einen Steckdosen-Adapter? null wenn kein Ziel-Land oder gleiches Land
+function adapterInfo(list) {
+  const home = PLUG_COUNTRIES[state.settings.homeCountry];
+  const dest = PLUG_COUNTRIES[list.destCountry];
+  if (!home || !dest || list.destCountry === state.settings.homeCountry) return null;
+  const common = dest.plugs.filter(p => home.plugs.includes(p));
+  const status = !common.length ? 'needed' : (common.length === 1 && common[0] === 'C' ? 'maybe' : 'no');
+  return {
+    status,
+    plugs: dest.plugs.join('/'),
+    volt: dest.volt,
+    country: state.settings.lang === 'en' ? dest.en : dest.de,
+  };
 }
 
 function cyclePrio(list, id) {
@@ -877,6 +910,117 @@ function saveLuggageWeight(key) {
   saveState(); closeModal(); render();
 }
 
+// ---------------- Dokumenten-Safe ----------------
+async function renderSafe() {
+  let html = `<div class="topbar">
+    <button class="iconbtn" data-act="home">←</button>
+    <div style="flex:1"><h1>🔐 ${t('docSafe')}</h1></div>
+    ${safeKey ? `<button class="iconbtn" data-act="safe-lock" title="${t('lockSafe')}">🔒</button>` : ''}
+  </div>
+  <div class="wiz-hint">${t('safeHint')}</div>`;
+
+  const hasSetup = await safeHasSetup();
+  if (view.name !== 'safe') return; // Nutzer hat inzwischen weiternavigiert
+
+  if (!hasSetup) {
+    html += `<div class="wiz-title">${t('safeSetupTitle')}</div>
+      <div class="banner">${t('safeSetupHint')}</div>
+      <div class="field"><label>${t('passphrase')}</label><input id="sp-1" type="password" autocomplete="new-password"></div>
+      <div class="field"><label>${t('passphraseRepeat')}</label><input id="sp-2" type="password" autocomplete="new-password"></div>
+      <button class="btn" data-act="safe-setup">${t('save')}</button>`;
+    $app.innerHTML = html;
+    return;
+  }
+  if (!safeKey) {
+    html += `<div class="field" style="margin-top:24px"><label>${t('passphrase')}</label>
+      <input id="sp-unlock" type="password" autocomplete="current-password"></div>
+      <button class="btn" data-act="safe-unlock">🔓 ${t('unlock')}</button>
+      <div style="height:30px"></div>
+      <button class="btn danger" data-act="safe-reset">🗑 ${t('safeReset')}</button>`;
+    $app.innerHTML = html;
+    const inp = document.getElementById('sp-unlock');
+    if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') document.querySelector('[data-act="safe-unlock"]').click(); });
+    return;
+  }
+
+  const docs = await safeListDocs();
+  if (view.name !== 'safe') return;
+  html += `<div style="display:flex;gap:8px">
+    <button class="btn secondary" style="flex:1" data-act="safe-file-trigger">📷 ${t('addFile')}</button>
+    <button class="btn secondary" style="flex:1" data-act="safe-note">📝 ${t('addNote')}</button>
+    <button class="btn secondary" style="flex:1" data-act="safe-address">📍 ${t('addAddress')}</button>
+  </div>
+  <input type="file" id="safe-file" accept="image/*,.pdf,application/pdf" multiple hidden>`;
+
+  const files = docs.filter(d => d.type !== 'address');
+  const addrs = docs.filter(d => d.type === 'address');
+  if (!docs.length) html += `<div class="empty"><span class="emoji">🗄️</span>${t('safeEmpty')}</div>`;
+  if (files.length) {
+    html += `<div class="cat-section"><div class="cat-head">📄 ${t('documents')}</div>`;
+    for (const d of files) {
+      const icon = d.type === 'note' ? '📝' : (d.mime && d.mime.startsWith('image/') ? '🖼️' : '📄');
+      html += `<div class="item" data-act="safe-open" data-id="${d.id}" style="cursor:pointer">
+        <span style="font-size:20px">${icon}</span>
+        <div class="name">${esc(d.name)}<br><span style="font-size:12px;color:var(--text-soft)">${new Date(d.created).toLocaleDateString(locale())}${d.type === 'file' ? ' · ' + Math.round(d.size / 1024) + ' KB' : ''}</span></div>
+        <button class="del" data-act="safe-del" data-id="${d.id}">✕</button>
+      </div>`;
+    }
+    html += '</div>';
+  }
+  if (addrs.length) {
+    html += `<div class="cat-section"><div class="cat-head">📍 ${t('addresses')}</div>`;
+    for (const d of addrs) {
+      const q = encodeURIComponent(d.address || '');
+      html += `<div class="item" style="flex-wrap:wrap">
+        <span style="font-size:20px">📍</span>
+        <div class="name">${esc(d.name)}<br><span style="font-size:12px;color:var(--text-soft)">${esc(d.address || '')}</span></div>
+        <button class="del" data-act="safe-del" data-id="${d.id}">✕</button>
+        <div style="width:100%;display:flex;gap:8px;margin-top:6px">
+          <a class="btn small secondary" style="flex:1;text-decoration:none" href="https://www.google.com/maps/dir/?api=1&destination=${q}" target="_blank" rel="noopener">🗺️ Google Maps</a>
+          <a class="btn small secondary" style="flex:1;text-decoration:none" href="https://maps.apple.com/?daddr=${q}" target="_blank" rel="noopener"> Apple Maps</a>
+        </div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+  $app.innerHTML = html;
+  const finp = document.getElementById('safe-file');
+  if (finp) finp.addEventListener('change', async e => {
+    for (const f of e.target.files) await safeAddFile(f);
+    render();
+    toast(t('saved'));
+  });
+}
+
+function safeEntryModal(type) {
+  showModal(`<h3>${type === 'address' ? '📍 ' + t('addAddress') : '📝 ' + t('addNote')}</h3>
+    <div class="field"><label>${t('tileName')}</label><input id="se-name" type="text"></div>
+    <div class="field"><label>${type === 'address' ? t('addressText') : t('noteText')}</label>
+      <textarea id="se-text" rows="3" placeholder="${type === 'address' ? t('addressPh') : ''}"></textarea></div>
+    <button class="btn" data-act="safe-entry-save" data-key="${type}">${t('save')}</button>
+    <button class="btn secondary" data-act="close-modal">${t('cancel')}</button>`);
+}
+
+async function safeOpenDoc(id) {
+  const docs = await safeListDocs();
+  const d = docs.find(x => x.id === id);
+  if (!d) return;
+  if (d.type === 'note') {
+    showModal(`<h3>📝 ${esc(d.name)}</h3>
+      <div class="card" style="cursor:default;white-space:pre-wrap;font-size:15px">${esc(d.text || '')}</div>
+      <button class="btn secondary" data-act="close-modal">${t('done')}</button>`);
+    return;
+  }
+  const { url, meta } = await safeFileUrl(id);
+  const isImg = meta.mime && meta.mime.startsWith('image/');
+  showModal(`<h3>${isImg ? '🖼️' : '📄'} ${esc(meta.name)}</h3>
+    ${isImg
+      ? `<img src="${url}" style="width:100%;border-radius:12px">`
+      : `<iframe src="${url}" style="width:100%;height:60vh;border:none;border-radius:12px;background:#fff"></iframe>`}
+    <a class="btn secondary" style="text-decoration:none;display:block;text-align:center" href="${url}" target="_blank" rel="noopener">↗️ ${t('openExternal')}</a>
+    <button class="btn secondary" data-act="close-modal">${t('done')}</button>`);
+}
+
 // ---------------- Katalog (Meine Artikel) ----------------
 function renderCatalog() {
   let html = `<div class="topbar">
@@ -956,7 +1100,7 @@ function renderSettings() {
       <button data-act="set-theme" data-key="system" class="${s.theme === 'system' ? 'sel' : ''}">${t('themeSystem')}</button>
     </div></div>
   <div class="field"><label>${t('homeCountry')} · ${t('homeCountryHint')}</label>
-    <select id="set-country">${COUNTRIES.map(c => `<option value="${c}" ${c === s.homeCountry ? 'selected' : ''}>${esc(cname(c))}</option>`).join('')}</select>
+    <select id="set-country">${COUNTRIES.slice().sort((a, b) => cname(a).localeCompare(cname(b))).map(c => `<option value="${c}" ${c === s.homeCountry ? 'selected' : ''}>${esc(cname(c))}</option>`).join('')}</select>
   </div>
   <button class="btn secondary" data-act="export-backup">💾 ${t('exportData')}</button>
   <button class="btn secondary" data-act="import-trigger">📥 ${t('importData')}</button>
@@ -1103,6 +1247,42 @@ document.addEventListener('click', e => {
     case 'fc-add-all':
       finalCheckMissing(getList(el.dataset.list)).forEach(k => fcAddItem(el.dataset.list, k));
       finalCheckModal(el.dataset.list); toast(t('added')); break;
+    // Adapter
+    case 'add-adapter': fcAddItem(view.id, 'adapter'); render(); toast(t('added')); break;
+    // Dokumenten-Safe
+    case 'safe': go({ name: 'safe' }); break;
+    case 'safe-setup': {
+      const p1 = document.getElementById('sp-1').value, p2 = document.getElementById('sp-2').value;
+      if (p1.length < 6) { toast(t('passTooShort')); break; }
+      if (p1 !== p2) { toast(t('passMismatch')); break; }
+      safeSetup(p1).then(() => render());
+      break;
+    }
+    case 'safe-unlock':
+      safeUnlock(document.getElementById('sp-unlock').value).then(ok => {
+        if (ok) render(); else toast(t('wrongPass'));
+      });
+      break;
+    case 'safe-lock': safeLock(); render(); break;
+    case 'safe-reset':
+      if (confirm(t('safeResetConfirm')) && confirm(t('safeResetConfirm'))) {
+        safeReset().then(() => { render(); toast(t('deleted')); });
+      }
+      break;
+    case 'safe-file-trigger': document.getElementById('safe-file').click(); break;
+    case 'safe-note': safeEntryModal('note'); break;
+    case 'safe-address': safeEntryModal('address'); break;
+    case 'safe-entry-save': {
+      const name = document.getElementById('se-name').value.trim();
+      const text = document.getElementById('se-text').value.trim();
+      if (!name || !text) break;
+      safeAddEntry(key, name, text).then(() => { closeModal(); render(); toast(t('saved')); });
+      break;
+    }
+    case 'safe-open': safeOpenDoc(id); break;
+    case 'safe-del':
+      if (confirm(t('deleteDocConfirm'))) safeDelete(id).then(() => render());
+      break;
     // Gewicht
     case 'weight-view': closeModal(); go({ name: 'weight', id }); break;
     case 'edit-weight': weightEditModal(view.id, id); break;
