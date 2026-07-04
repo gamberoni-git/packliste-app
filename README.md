@@ -29,10 +29,15 @@ Icons neu generieren: `node tools/gen-icons.js`
 
 GitHub Pages (Branch `main`, Root). Bei Änderungen an den App-Dateien die Cache-Version in `sw.js` (`packlist-v1`) hochzählen, damit installierte PWAs das Update ziehen.
 
+## Weitere Features (seit MVP)
+
+- **Final Check**: prüft auf fehlende kritische Artikel (je Reiseart, Klima, Transport, Aktivität)
+- **Rückreise-Checkliste**: Hotel-Safe, Kühlschrank, Mietauto-Kabel etc., kontextabhängig
+- **Gewichtsschätzung**: Annahmen für alle Artikel + Gepäck-Leergewichte, korrigierbar, Flug-Limiten-Warnung
+- **Dokumenten-Safe**: AES-256-verschlüsselte Offline-Ablage (Pass, Buchungen, Notizen), Adressen mit Google/Apple-Maps-Lokalisierung, Passwort-Manager-Integration
+- **Adapter-Hinweis**: 50 Länder mit Steckertypen, mehrere Ziel-Länder pro Reise
+- **Lern-Funktion**: Nach der Reise Feedback (vergessen/überflüssig) → Templates passen sich an
+
 ## Roadmap
 
-1. Final Check (fehlende wichtige Artikel je Reiseart) + Rückreise-Checkliste (Hotel-Safe, Kühlschrank, Mietauto-Kabel, ...)
-2. Gewichtsschätzung pro Gepäckstück
-3. Dokumenten-Safe (verschlüsselt, offline) mit Adressen und Maps-Übergabe
-4. Lern-Funktion nach der Reise (vergessen/überflüssig → Templates anpassen)
-5. Optionaler Sync über Synology NAS
+- Optionaler Sync über Synology NAS

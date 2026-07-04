@@ -1,5 +1,5 @@
 // Service Worker: App-Shell cachen für Offline-Betrieb
-const CACHE = 'packlist-v6';
+const CACHE = 'packlist-v7';
 const ASSETS = [
   '.',
   'index.html',

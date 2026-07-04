@@ -1,6 +1,6 @@
 // Persistenz (localStorage) und Datenzugriff
 const STORAGE_KEY = 'packlist_v1';
-const APP_VERSION = '0.4.1';
+const APP_VERSION = '0.5.0';
 
 function defaultState() {
   return {
@@ -13,6 +13,9 @@ function defaultState() {
     custom: { tripTypes: [], transport: [], luggage: [], activities: [] },
     // Anpassungen an Standard-Kacheln: key -> {name?, icon?, hidden?}
     overrides: { tripTypes: {}, transport: {}, luggage: {}, activities: {} },
+    // Lern-Funktion: pro Reiseart Feedback-Zähler
+    // { tripType: { add: {itemKey: n}, remove: {itemKey: n} } }
+    learn: {},
     // Manuell korrigierte Gewichte (dauerhaft): itemKey -> Gramm
     weights: {},
     // Manuell korrigierte Gepäck-Leergewichte: luggageKey -> Gramm
@@ -126,26 +129,67 @@ function computeQty(def, days) {
 }
 
 function buildListItems(tripType, activities, transport, climate, days) {
-  const keys = [];
+  let keys = [];
   const push = (arr) => (arr || []).forEach(k => { if (!keys.includes(k)) keys.push(k); });
   const tt = tileInfo('tripTypes', tripType);
   push(tt ? tt.items : []);
   (activities || []).forEach(a => { const x = tileInfo('activities', a); push(x ? x.items : []); });
   (transport || []).forEach(tr => { const x = tileInfo('transport', tr); push(x ? x.items : []); });
   (climate || []).forEach(cl => push((CLIMATE[cl] || {}).items));
-  return keys.filter(k => ITEMS[k]).map(k => {
+  // Lern-Funktion anwenden: Vergessenes ergänzen (ab 1×),
+  // Überflüssiges weglassen (ab 2× gemeldet)
+  const learn = state.learn[tripType];
+  if (learn) {
+    push(Object.keys(learn.add || {}).filter(k => learn.add[k] >= 1));
+    keys = keys.filter(k => !((learn.remove || {})[k] >= 2));
+  }
+  return keys.map(k => {
     const def = ITEMS[k];
-    return {
-      id: uid(),
-      k: k,             // Referenz auf Katalog-Artikel (für Sprachwechsel)
-      n: null,          // eigener Name (nur bei Custom-Artikeln)
-      c: def[0],
-      q: computeQty(def[3], days),
-      p: def[4],
-      lm: false,        // Last-Minute nur manuell setzen, keine Defaults
-      packed: false,
-    };
-  });
+    if (def) {
+      return {
+        id: uid(),
+        k: k,             // Referenz auf Katalog-Artikel (für Sprachwechsel)
+        n: null,          // eigener Name (nur bei Custom-Artikeln)
+        c: def[0],
+        q: computeQty(def[3], days),
+        p: def[4],
+        lm: false,        // Last-Minute nur manuell setzen, keine Defaults
+        packed: false,
+      };
+    }
+    const ci = state.customItems.find(c => c.id === k);
+    if (ci) {
+      return { id: uid(), k, n: ci.name, c: ci.cat, q: ci.defQty || 1, p: ci.prio || 2, lm: !!ci.lastMinute, packed: false };
+    }
+    return null;
+  }).filter(Boolean);
+}
+
+// ---- Lern-Funktion ----
+// Unreviewte Listen, deren Reise vorbei ist
+function reviewableLists() {
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return state.lists.filter(l => l.dateTo && !l.reviewed && l.tripType &&
+    new Date(l.dateTo + 'T00:00:00') < today);
+}
+
+// Feedback in die Lern-Zähler übernehmen
+function applyReview(list, missingKeys, unusedItemIds) {
+  const tt = list.tripType;
+  state.learn[tt] = state.learn[tt] || { add: {}, remove: {} };
+  const L = state.learn[tt];
+  for (const k of missingKeys) {
+    L.add[k] = (L.add[k] || 0) + 1;
+    delete L.remove[k]; // widersprüchliches Signal zurücksetzen
+  }
+  for (const id of unusedItemIds) {
+    const it = list.items.find(i => i.id === id);
+    if (!it || !it.k) continue;
+    L.remove[it.k] = (L.remove[it.k] || 0) + 1;
+    delete L.add[it.k];
+  }
+  list.reviewed = true;
+  saveState();
 }
 
 function tripDays(list) {

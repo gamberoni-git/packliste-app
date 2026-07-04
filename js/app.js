@@ -66,6 +66,7 @@ function render() {
     case 'pack': renderPack(); break;
     case 'return': renderReturn(); break;
     case 'weight': renderWeight(); break;
+    case 'review': renderReview(); break;
     case 'safe': renderSafe(); break;
     case 'catalog': renderCatalog(); break;
     case 'settings': renderSettings(); break;
@@ -81,6 +82,15 @@ function renderHome() {
     <button class="iconbtn" data-act="settings" title="${t('settings')}">⚙️</button>
   </div>`;
   html += `<button class="btn" data-act="new-list">＋ ${t('newList')}</button>`;
+  // Lern-Funktion: abgeschlossene Reise ohne Feedback?
+  const rev = reviewableLists()[0];
+  if (rev) {
+    html += `<div class="banner info">🏁 <b>${t('tripFinished')}</b><br>${t('reviewPrompt', { name: esc(rev.name) })}
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn small" style="margin:0" data-act="review-start" data-id="${rev.id}">💡 ${t('reviewBtn')}</button>
+        <button class="btn small secondary" style="margin:0" data-act="review-dismiss" data-id="${rev.id}">${t('skipReview')}</button>
+      </div></div>`;
+  }
   if (!state.lists.length) {
     html += `<div class="empty"><span class="emoji">🏝️</span>${t('noLists')}</div>`;
   } else {
@@ -926,6 +936,81 @@ function saveLuggageWeight(key) {
   saveState(); closeModal(); render();
 }
 
+// ---------------- Reise-Feedback (Lern-Funktion) ----------------
+let reviewState = null; // {listId, missing: [keys], unused: [itemIds]}
+
+function renderReview() {
+  const list = getList(view.id);
+  if (!list) return go({ name: 'home' });
+  if (!reviewState || reviewState.listId !== list.id) {
+    reviewState = { listId: list.id, missing: [], unused: [] };
+  }
+  let html = `<div class="topbar">
+    <button class="iconbtn" data-act="home">←</button>
+    <div style="flex:1;min-width:0"><h1>💡 ${t('reviewTitle')}</h1>
+    <div class="sub">${esc(list.name)}</div></div>
+  </div>`;
+  // Frage 1: Vergessenes
+  html += `<div class="wiz-title">🤔 ${t('reviewMissingQ')}</div>
+    <div class="wiz-hint">${t('reviewMissingHint')}</div>`;
+  if (reviewState.missing.length) {
+    html += `<div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">
+      ${reviewState.missing.map(k => `<span class="btn small secondary" style="margin:0" data-act="review-unpick" data-key="${k}">${esc(itemDefName(k))} ✕</span>`).join('')}</div>`;
+  }
+  html += `<button class="btn secondary" data-act="review-add-missing">＋ ${t('reviewPickMissing')}</button>`;
+  // Frage 2: Überflüssiges
+  html += `<div class="wiz-title" style="margin-top:24px">🗑 ${t('reviewUnusedQ')}</div>
+    <div class="wiz-hint">${t('reviewUnusedHint')}</div>`;
+  for (const g of groupByCat(list.items)) {
+    html += `<div class="cat-section"><div class="cat-head">${catIcon(g.cat)} ${esc(catName(g.cat))}</div>`;
+    for (const it of g.items) {
+      const marked = reviewState.unused.includes(it.id);
+      html += `<div class="pack-item ${marked ? 'packed' : ''}" data-act="review-toggle-unused" data-id="${it.id}">
+        <div class="check" style="${marked ? 'background:var(--danger);border-color:var(--danger)' : ''}">${marked ? '✕' : ''}</div>
+        <div class="name" style="${marked ? 'color:var(--danger)' : ''}">${esc(listItemName(it))}</div>
+      </div>`;
+    }
+    html += '</div>';
+  }
+  html += `<div style="height:70px"></div>
+    <div class="bottombar"><button class="btn" data-act="review-save">💾 ${t('reviewSave')}</button></div>`;
+  $app.innerHTML = html;
+}
+
+// Auswahl-Modal für vergessene Artikel (Katalog + eigene + neu)
+function reviewMissingModal() {
+  const list = getList(reviewState.listId);
+  const inList = new Set(list.items.map(i => i.k).filter(Boolean));
+  let inner = `<h3>🤔 ${t('reviewMissingQ')}</h3>
+    <div class="field" style="display:flex;gap:8px;align-items:center">
+      <input id="rm-new" type="text" placeholder="${t('itemNamePh')}" style="flex:1">
+      <button class="btn small" style="margin:0" data-act="review-new-missing">＋</button>
+    </div>`;
+  if (state.customItems.length) {
+    inner += `<div class="cat-head" style="margin-top:8px">⭐ ${t('customItems')}</div><div class="tiles">`;
+    for (const ci of state.customItems) {
+      if (inList.has(ci.id)) continue;
+      const sel = reviewState.missing.includes(ci.id);
+      inner += `<div class="tile ${sel ? 'sel' : ''}" data-act="review-pick" data-key="${ci.id}">
+        <span class="emoji">${catIcon(ci.cat)}</span><span class="lbl">${esc(ci.name)}</span></div>`;
+    }
+    inner += '</div>';
+  }
+  for (const c of allCatIds()) {
+    const keys = Object.keys(ITEMS).filter(k => ITEMS[k][0] === c && !inList.has(k));
+    if (!keys.length) continue;
+    inner += `<div class="cat-head" style="margin-top:8px">${catIcon(c)} ${esc(catName(c))}</div><div class="tiles">`;
+    for (const k of keys) {
+      const sel = reviewState.missing.includes(k);
+      inner += `<div class="tile ${sel ? 'sel' : ''}" data-act="review-pick" data-key="${k}">
+        <span class="emoji">${itemEmoji(k, c)}</span><span class="lbl">${esc(itemDefName(k))}</span></div>`;
+    }
+    inner += '</div>';
+  }
+  inner += `<button class="btn" data-act="close-modal">${t('done')}</button>`;
+  showModal(inner);
+}
+
 // ---------------- Dokumenten-Safe ----------------
 async function renderSafe() {
   let html = `<div class="topbar">
@@ -1142,6 +1227,7 @@ function renderSettings() {
   <div class="field"><label>${t('homeCountry')} · ${t('homeCountryHint')}</label>
     <select id="set-country">${COUNTRIES.slice().sort((a, b) => cname(a).localeCompare(cname(b))).map(c => `<option value="${c}" ${c === s.homeCountry ? 'selected' : ''}>${esc(cname(c))}</option>`).join('')}</select>
   </div>
+  ${learnSettingsHtml()}
   <button class="btn secondary" data-act="export-backup">💾 ${t('exportData')}</button>
   <button class="btn secondary" data-act="import-trigger">📥 ${t('importData')}</button>
   <input type="file" id="import-file" accept=".json,application/json" hidden>
@@ -1151,6 +1237,35 @@ function renderSettings() {
     state.settings.homeCountry = e.target.value; saveState();
   });
   document.getElementById('import-file').addEventListener('change', handleImportFile);
+}
+
+// Übersicht der gelernten Anpassungen (Settings)
+function learnSettingsHtml() {
+  const tts = Object.keys(state.learn).filter(tt =>
+    Object.keys(state.learn[tt].add || {}).length || Object.keys(state.learn[tt].remove || {}).length);
+  if (!tts.length) return '';
+  let h = `<div class="field"><label>💡 ${t('learnTitle')}</label>`;
+  for (const tt of tts) {
+    const info = tileInfo('tripTypes', tt);
+    const L = state.learn[tt];
+    h += `<div class="card" style="cursor:default"><h3 style="font-size:15px">${info ? info.icon + ' ' + esc(info.label) : esc(tt)}</h3>`;
+    for (const k in L.add) {
+      h += `<div style="display:flex;align-items:center;gap:8px;font-size:14px;margin:4px 0">
+        <span style="color:var(--ok);font-weight:700">＋</span>
+        <span style="flex:1">${esc(itemDefName(k))} <span style="color:var(--text-soft);font-size:12px">(${t('learnAddLabel')})</span></span>
+        <button class="del" data-act="learn-del" data-tt="${tt}" data-kind="add" data-key="${k}">✕</button></div>`;
+    }
+    for (const k in L.remove) {
+      const active = L.remove[k] >= 2;
+      h += `<div style="display:flex;align-items:center;gap:8px;font-size:14px;margin:4px 0">
+        <span style="color:var(--danger);font-weight:700">−</span>
+        <span style="flex:1;${active ? 'text-decoration:line-through' : ''}">${esc(itemDefName(k))}
+          <span style="color:var(--text-soft);font-size:12px">(${L.remove[k]}× ${active ? t('learnRemovedLabel') : t('learnRemoveLabel')})</span></span>
+        <button class="del" data-act="learn-del" data-tt="${tt}" data-kind="remove" data-key="${k}">✕</button></div>`;
+    }
+    h += '</div>';
+  }
+  return h + '</div>';
 }
 
 function handleImportFile(e) {
@@ -1302,6 +1417,40 @@ document.addEventListener('click', e => {
       finalCheckModal(el.dataset.list); toast(t('added')); break;
     // Adapter
     case 'add-adapter': fcAddItem(view.id, 'adapter'); render(); toast(t('added')); break;
+    // Lern-Funktion
+    case 'review-start': reviewState = null; go({ name: 'review', id }); break;
+    case 'review-dismiss': getList(id).reviewed = true; saveState(); render(); break;
+    case 'review-add-missing': reviewMissingModal(); break;
+    case 'review-pick':
+      toggleArr(reviewState.missing, key);
+      el.classList.toggle('sel');
+      break;
+    case 'review-unpick': toggleArr(reviewState.missing, key); render(); break;
+    case 'review-new-missing': {
+      const inp = document.getElementById('rm-new');
+      const name = inp.value.trim();
+      if (!name) break;
+      const ci = { id: uid(), name, cat: 'sonstiges', defQty: 1, prio: 2, lastMinute: false };
+      state.customItems.push(ci);
+      reviewState.missing.push(ci.id);
+      saveState();
+      reviewMissingModal();
+      break;
+    }
+    case 'review-toggle-unused': toggleArr(reviewState.unused, id); render(); break;
+    case 'review-save': {
+      const l = getList(reviewState.listId);
+      applyReview(l, reviewState.missing, reviewState.unused);
+      reviewState = null;
+      go({ name: 'home' });
+      toast(t('reviewSaved'));
+      break;
+    }
+    case 'learn-del': {
+      const L = state.learn[el.dataset.tt];
+      if (L) delete L[el.dataset.kind][key];
+      saveState(); render(); break;
+    }
     // Dokumenten-Safe
     case 'safe': go({ name: 'safe' }); break;
     case 'safe-lock': safeLock(); render(); break;
