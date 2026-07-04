@@ -1,6 +1,6 @@
 // Persistenz (localStorage) und Datenzugriff
 const STORAGE_KEY = 'packlist_v1';
-const APP_VERSION = '0.1.0';
+const APP_VERSION = '0.2.0';
 
 function defaultState() {
   return {
@@ -151,6 +151,39 @@ function tripDays(list) {
     return d > 0 ? d : 1;
   }
   return null;
+}
+
+// ---- Final Check ----
+// Liefert die Keys kritischer Artikel, die auf der Liste fehlen
+function finalCheckMissing(list) {
+  const have = new Set(list.items.map(i => i.k).filter(Boolean));
+  const critical = new Set();
+  const add = arr => (arr || []).forEach(k => critical.add(k));
+  add(CRITICAL.always);
+  add(CRITICAL.tripTypes[list.tripType]);
+  (list.climate || []).forEach(c => add(CRITICAL.climate[c]));
+  (list.transport || []).forEach(tr => add(CRITICAL.transport[tr]));
+  (list.activities || []).forEach(a => add(CRITICAL.activities[a]));
+  return [...critical].filter(k => ITEMS[k] && !have.has(k));
+}
+
+// ---- Rückreise-Checkliste ----
+// Erzeugt die Checkliste beim ersten Öffnen (Basis + kontextabhängige Checks)
+function ensureReturnChecks(list) {
+  if (list.returnChecks) return;
+  list.returnChecks = [];
+  for (const key in RETURN_CHECKS) {
+    const rc = RETURN_CHECKS[key];
+    if (rc.cond && !(list.transport || []).includes(rc.cond)) continue;
+    list.returnChecks.push({ id: uid(), k: key, n: null, done: false });
+  }
+  saveState();
+}
+
+function returnCheckName(rc) {
+  if (rc.n) return rc.n;
+  const def = RETURN_CHECKS[rc.k];
+  return def ? (state.settings.lang === 'en' ? def.en : def.de) : rc.k;
 }
 
 // ---- Export / Import ----

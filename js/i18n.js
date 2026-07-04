@@ -115,6 +115,19 @@ const I18N = {
     deleted: 'Gelöscht',
     uncategorized: 'Sonstiges',
     total: 'Total',
+    // Final Check
+    finalCheck: 'Final Check',
+    finalCheckOk: 'Sieht gut aus! Alle wichtigen Artikel sind auf der Liste.',
+    finalCheckMissing: 'Diese wichtigen Artikel fehlen noch auf deiner Liste:',
+    addAll: 'Alle hinzufügen',
+    added: 'Hinzugefügt',
+    // Rückreise
+    returnCheck: 'Rückreise-Checkliste',
+    returnHint: 'Vor der Abreise aus der Unterkunft durchgehen – nichts vergessen!',
+    addCheckpoint: 'Eigenen Punkt hinzufügen',
+    checkpointPh: 'z.B. Wanderstöcke im Skiraum holen',
+    allChecked: 'Alles erledigt – gute Heimreise! 👋',
+    resetChecks: 'Alle Haken zurücksetzen',
   },
   en: {
     appName: 'PackList',
@@ -225,5 +238,16 @@ const I18N = {
     deleted: 'Deleted',
     uncategorized: 'Other',
     total: 'Total',
+    finalCheck: 'Final check',
+    finalCheckOk: 'Looks good! All important items are on your list.',
+    finalCheckMissing: 'These important items are still missing from your list:',
+    addAll: 'Add all',
+    added: 'Added',
+    returnCheck: 'Departure checklist',
+    returnHint: 'Go through this before leaving your accommodation – forget nothing!',
+    addCheckpoint: 'Add your own checkpoint',
+    checkpointPh: 'e.g. Get trekking poles from ski room',
+    allChecked: 'All done – safe travels home! 👋',
+    resetChecks: 'Reset all checkmarks',
   }
 };

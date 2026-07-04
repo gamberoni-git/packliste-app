@@ -64,6 +64,7 @@ function render() {
     case 'wizard': renderWizard(); break;
     case 'list': renderList(); break;
     case 'pack': renderPack(); break;
+    case 'return': renderReturn(); break;
     case 'catalog': renderCatalog(); break;
     case 'settings': renderSettings(); break;
   }
@@ -397,9 +398,43 @@ function renderList() {
   }
   html += `<button class="btn secondary" data-act="add-item">＋ ${t('addItem')}</button>
     <button class="btn secondary" data-act="add-cat">＋ ${t('addCategory')}</button>
+    <button class="btn secondary" data-act="final-check">🔍 ${t('finalCheck')}</button>
     <div style="height:10px"></div>
     <div class="bottombar"><button class="btn" data-act="pack-mode">🎒 ${t('packMode')} (${packed}/${total})</button></div>`;
   $app.innerHTML = html;
+}
+
+// ---------------- Final Check ----------------
+function finalCheckModal(listId) {
+  const list = getList(listId);
+  const missing = finalCheckMissing(list);
+  let inner = `<h3>🔍 ${t('finalCheck')}</h3>`;
+  if (!missing.length) {
+    inner += `<div class="empty" style="padding:20px"><span class="emoji">✅</span>${t('finalCheckOk')}</div>`;
+  } else {
+    inner += `<div class="wiz-hint">${t('finalCheckMissing')}</div>`;
+    for (const k of missing) {
+      inner += `<div class="item">
+        <span style="font-size:20px">${itemEmoji(k, ITEMS[k][0])}</span>
+        <div class="name">${esc(itemDefName(k))}<br><span style="font-size:12px;color:var(--text-soft)">${catIcon(ITEMS[k][0])} ${esc(catName(ITEMS[k][0]))}</span></div>
+        <button class="btn small" style="margin:0" data-act="fc-add" data-list="${listId}" data-key="${k}">＋ ${t('add')}</button>
+      </div>`;
+    }
+    inner += `<button class="btn" data-act="fc-add-all" data-list="${listId}">＋ ${t('addAll')}</button>`;
+  }
+  inner += `<button class="btn secondary" data-act="close-modal">${t('done')}</button>`;
+  showModal(inner);
+}
+
+function fcAddItem(listId, key) {
+  const list = getList(listId);
+  if (list.items.some(i => i.k === key)) return;
+  const def = ITEMS[key];
+  list.items.push({
+    id: uid(), k: key, n: null, c: def[0],
+    q: computeQty(def[3], tripDays(list)), p: def[4], lm: false, packed: false,
+  });
+  saveState();
 }
 
 function cyclePrio(list, id) {
@@ -605,6 +640,7 @@ function listMenuModal(listId) {
     <button class="btn secondary" data-act="rename-list" data-id="${listId}">✏️ ${t('rename')}</button>
     <button class="btn secondary" data-act="duplicate-list" data-id="${listId}">📋 ${t('duplicate')}</button>
     <button class="btn secondary" data-act="share-list" data-id="${listId}">📤 ${t('share')}</button>
+    <button class="btn secondary" data-act="return-check" data-id="${listId}">🧹 ${t('returnCheck')}</button>
     <button class="btn secondary" data-act="reset-packing" data-id="${listId}">↩️ ${t('resetPacking')}</button>
     <button class="btn danger" data-act="delete-list" data-id="${listId}">🗑 ${t('deleteList')}</button>
     <button class="btn secondary" data-act="close-modal">${t('cancel')}</button>`);
@@ -703,6 +739,40 @@ function renderPack() {
     }
     html += `</div>`;
   }
+  html += `<div style="height:8px"></div>
+    <button class="btn secondary" data-act="return-check" data-id="${list.id}">🧹 ${t('returnCheck')}</button>`;
+  $app.innerHTML = html;
+}
+
+// ---------------- Rückreise-Checkliste ----------------
+function renderReturn() {
+  const list = getList(view.id);
+  if (!list) return go({ name: 'home' });
+  ensureReturnChecks(list);
+  const total = list.returnChecks.length, done = list.returnChecks.filter(c => c.done).length;
+  const pct = total ? Math.round(done / total * 100) : 0;
+  let html = `<div class="topbar">
+    <button class="iconbtn" data-act="back-to-list" data-id="${list.id}">←</button>
+    <div style="flex:1;min-width:0"><h1>🧹 ${t('returnCheck')}</h1>
+    <div class="sub">${done}/${total} · ${esc(list.name)}</div></div>
+  </div>
+  <div class="progressbar" style="height:8px"><div style="width:${pct}%"></div></div>
+  <div class="wiz-hint" style="margin-top:10px">${t('returnHint')}</div>`;
+  if (done === total && total > 0) {
+    html += `<div class="empty" style="padding:16px"><span class="emoji">✅</span>${t('allChecked')}</div>`;
+  }
+  for (const rc of list.returnChecks) {
+    html += `<div class="pack-item ${rc.done ? 'packed' : ''}" data-act="toggle-return" data-id="${rc.id}">
+      <div class="check">${rc.done ? '✓' : ''}</div>
+      <div class="name">${esc(returnCheckName(rc))}</div>
+      <button class="del" data-act="return-del" data-id="${rc.id}">✕</button>
+    </div>`;
+  }
+  html += `<div class="field" style="display:flex;gap:8px;align-items:center">
+      <input id="rc-new" type="text" placeholder="${t('checkpointPh')}" style="flex:1">
+      <button class="btn small" style="margin:0" data-act="return-add">＋</button>
+    </div>
+    <button class="btn secondary" data-act="return-reset">↩️ ${t('resetChecks')}</button>`;
   $app.innerHTML = html;
 }
 
@@ -926,6 +996,26 @@ document.addEventListener('click', e => {
       const it = list.items.find(i => i.id === id);
       it.packed = !it.packed; saveState(); render(); break;
     }
+    // Final Check
+    case 'final-check': finalCheckModal(view.id); break;
+    case 'fc-add': fcAddItem(el.dataset.list, key); finalCheckModal(el.dataset.list); toast(t('added')); break;
+    case 'fc-add-all':
+      finalCheckMissing(getList(el.dataset.list)).forEach(k => fcAddItem(el.dataset.list, k));
+      finalCheckModal(el.dataset.list); toast(t('added')); break;
+    // Rückreise-Checkliste
+    case 'return-check': closeModal(); go({ name: 'return', id }); break;
+    case 'toggle-return': {
+      const rc = list.returnChecks.find(c => c.id === id);
+      rc.done = !rc.done; saveState(); render(); break;
+    }
+    case 'return-add': {
+      const inp = document.getElementById('rc-new');
+      const txt = inp.value.trim();
+      if (txt) { list.returnChecks.push({ id: uid(), k: null, n: txt, done: false }); saveState(); render(); }
+      break;
+    }
+    case 'return-del': list.returnChecks = list.returnChecks.filter(c => c.id !== id); saveState(); render(); break;
+    case 'return-reset': list.returnChecks.forEach(c => c.done = false); saveState(); render(); break;
     // Catalog
     case 'catalog-add': catalogAddModal(); break;
     case 'catalog-edit': catalogEditModal(id); break;

@@ -163,7 +163,7 @@ body {
   background: transparent; color: var(--text); font-size: 17px; cursor: pointer;
 }
 .item .qty span { min-width: 24px; text-align: center; font-weight: 600; font-size: 15px; }
-.item .del { border: none; background: none; color: var(--text-soft); font-size: 17px; cursor: pointer; padding: 4px; }
+.item .del, .pack-item .del { border: none; background: none; color: var(--text-soft); font-size: 17px; cursor: pointer; padding: 4px; }
 
 /* Packing mode */
 .pack-item {

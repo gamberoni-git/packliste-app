@@ -265,6 +265,67 @@ const CLIMATE = {
   schnee:    { de: 'Schnee', en: 'Snow', icon: '❄️', items: ['muetze','handschuhe','schal','thermounterwaesche'] },
 };
 
+// Final Check: kritische Artikel, die je nach Kontext nicht fehlen dürfen
+const CRITICAL = {
+  always: ['medis', 'zahnbuerste', 'handy_ladekabel', 'kreditkarte'],
+  tripTypes: {
+    strandferien: ['sonnencreme', 'badehose', 'sonnenbrille', 'badetuch'],
+    wanderferien: ['wanderschuhe', 'regenjacke', 'sonnencreme', 'trinkflasche', 'blasenpflaster'],
+    trekkingtour: ['wanderschuhe', 'regenjacke', 'erste_hilfe', 'stirnlampe', 'blasenpflaster'],
+    businesstrip: ['laptop', 'business_hemden', 'business_schuhe'],
+    skiferien: ['skihandschuhe', 'skibrille', 'skihelm', 'skisocken', 'sonnencreme'],
+    skitour: ['lvs', 'schaufel_sonde', 'felle', 'skihelm', 'sonnencreme'],
+    runningrace: ['laufschuhe', 'laufsocken', 'startnummernband', 'gels'],
+    tauchferien: ['tauchschein', 'badehose', 'sonnencreme'],
+    bikeferien: ['velohelm', 'flickzeug', 'radhose'],
+  },
+  climate: {
+    heiss: ['sonnencreme', 'sonnenbrille', 'sonnenhut'],
+    warm: ['sonnencreme'],
+    kalt: ['muetze', 'handschuhe'],
+    schnee: ['muetze', 'handschuhe'],
+    regnerisch: ['regenjacke'],
+  },
+  transport: {
+    flugzeug: ['reisepass', 'tickets'],
+    mietauto: ['fuehrerschein', 'kreditkarte'],
+    eigenes_auto: ['fuehrerschein'],
+    fahrrad: ['velohelm'],
+  },
+  activities: {
+    wandern: ['wanderschuhe', 'regenjacke'],
+    trekking: ['wanderschuhe', 'erste_hilfe'],
+    running: ['laufschuhe'],
+    biken: ['velohelm'],
+    tauchen: ['tauchschein'],
+    schwimmen: ['badehose'],
+    business: ['laptop'],
+    skifahren: ['skihelm', 'skihandschuhe'],
+  },
+};
+
+// Rückreise-Checkliste: Basis-Checks + kontextabhängige (cond = Transport-Key)
+const RETURN_CHECKS = {
+  safe:        { de: 'Hotel-Safe geleert', en: 'Hotel safe emptied', cond: null },
+  kuehlschrank:{ de: 'Kühlschrank / Minibar geleert', en: 'Fridge / minibar emptied', cond: null },
+  ladegeraete: { de: 'Ladegeräte & Kabel eingesammelt (alle Steckdosen absuchen)', en: 'Chargers & cables collected (check all outlets)', cond: null },
+  bad:         { de: 'Badezimmer geräumt (Zahnbürste, Duschgel, Rasierer)', en: 'Bathroom cleared (toothbrush, shower gel, razor)', cond: null },
+  schraenke:   { de: 'Schränke & Schubladen kontrolliert', en: 'Wardrobes & drawers checked', cond: null },
+  bett:        { de: 'Unter dem Bett & hinter Vorhängen nachgeschaut', en: 'Checked under the bed & behind curtains', cond: null },
+  balkon:      { de: 'Balkon / Terrasse kontrolliert', en: 'Balcony / terrace checked', cond: null },
+  waesche:     { de: 'Hängende Wäsche / Kleider im Bad eingepackt', en: 'Hanging laundry / clothes in bathroom packed', cond: null },
+  dokumente:   { de: 'Reisedokumente & Wertsachen eingepackt', en: 'Travel documents & valuables packed', cond: null },
+  souvenirs:   { de: 'Souvenirs & Einkäufe verstaut', en: 'Souvenirs & purchases stowed', cond: null },
+  schluessel:  { de: 'Zimmerschlüssel / Karte abgegeben', en: 'Room key / card returned', cond: null },
+  checkin:     { de: 'Online-Check-in für Rückflug gemacht', en: 'Online check-in for return flight done', cond: 'flugzeug' },
+  fluessig:    { de: 'Flüssigkeiten & Powerbank korrekt ins Gepäck verteilt', en: 'Liquids & power bank packed correctly', cond: 'flugzeug' },
+  mietauto_kabel: { de: 'Alle Kabel & Gegenstände aus dem Mietauto entfernt (auch Handschuhfach)', en: 'All cables & items removed from rental car (incl. glovebox)', cond: 'mietauto' },
+  mietauto_tanken:{ de: 'Mietauto vollgetankt', en: 'Rental car refuelled', cond: 'mietauto' },
+  mietauto_fotos: { de: 'Mietauto bei Rückgabe fotografiert (Schäden dokumentieren)', en: 'Photographed rental car at return (document condition)', cond: 'mietauto' },
+  auto_kabel:  { de: 'Ladekabel & Halterung aus dem Auto mitgenommen', en: 'Charger & mount taken from the car', cond: 'eigenes_auto' },
+  tickets_rueck: { de: 'Tickets für die Rückreise bereit', en: 'Return tickets ready', cond: 'zug' },
+};
+
 // Länder (Auswahl für Settings, Basis für spätere Adapter-Hinweise)
 const COUNTRIES = ['CH','DE','AT','FR','IT','ES','PT','GB','US','other'];
 const COUNTRY_NAMES = {
