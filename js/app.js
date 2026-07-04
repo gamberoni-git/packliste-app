@@ -26,10 +26,19 @@ function go(v) { view = v; render(); window.scrollTo(0, 0); }
 
 function getList(id) { return state.lists.find(l => l.id === id); }
 
+function locale() { return state.settings.lang === 'en' ? 'en-GB' : 'de-CH'; }
+
 function fmtDate(d) {
   if (!d) return '';
-  const dt = new Date(d + 'T00:00:00');
-  return dt.toLocaleDateString(state.settings.lang === 'en' ? 'en-GB' : 'de-CH', { day: 'numeric', month: 'short', year: 'numeric' });
+  return new Date(d + 'T00:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function fmtShort(d) {
+  return new Date(d + 'T00:00:00').toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
+}
+
+function localIso(dt) {
+  return dt.getFullYear() + '-' + String(dt.getMonth() + 1).padStart(2, '0') + '-' + String(dt.getDate()).padStart(2, '0');
 }
 
 function listMeta(list) {
@@ -74,9 +83,10 @@ function renderHome() {
     for (const l of state.lists) {
       const total = l.items.length;
       const packed = l.items.filter(i => i.packed).length;
-      const tt = TRIP_TYPES[l.tripType];
+      const tt = tileInfo('tripTypes', l.tripType);
       html += `<div class="card" data-act="open-list" data-id="${l.id}">
-        <h3>${tt ? tt.icon + ' ' : ''}${esc(l.name)}</h3>
+        <button class="card-menu" data-act="list-menu" data-id="${l.id}">⋯</button>
+        <h3 style="padding-right:30px">${tt ? tt.icon + ' ' : ''}${esc(l.name)}</h3>
         <div class="meta">${listMeta(l)} · ${total} ${t('itemsCount')}</div>
         <div class="progressbar"><div style="width:${total ? Math.round(packed / total * 100) : 0}%"></div></div>
       </div>`;
@@ -89,8 +99,28 @@ function renderHome() {
 const WIZ_STEPS = ['type', 'details', 'transport', 'luggage', 'climate', 'activities'];
 
 function startWizard() {
-  wiz = { step: 0, tripType: null, dest: '', dateFrom: '', dateTo: '', days: '', name: '', transport: [], luggage: [], bagOption: 'carryon', climate: [], activities: [] };
+  const now = new Date();
+  wiz = {
+    step: 0, tripType: null, dest: '', dateFrom: '', dateTo: '', name: '',
+    transport: [], luggage: [], bagOption: 'carryon', climate: [], activities: [],
+    calY: now.getFullYear(), calM: now.getMonth(),
+  };
   go({ name: 'wizard' });
+}
+
+// Kacheln eines anpassbaren Screens (mit +-Kachel; lange drücken = bearbeiten)
+function editableTilesHtml(dictName, selected, act, multi) {
+  let h = '<div class="tiles">';
+  for (const e of tileEntries(dictName)) {
+    const sel = multi ? selected.includes(e.key) : selected === e.key;
+    h += `<div class="tile ${sel ? 'sel' : ''}" data-act="${act}" data-key="${e.key}" data-dict="${dictName}">
+      <span class="emoji">${e.icon}</span><span class="lbl">${esc(e.label)}</span></div>`;
+  }
+  h += `<div class="tile add-tile" data-act="tile-add" data-dict="${dictName}">
+    <span class="emoji">＋</span><span class="lbl">${t('addTile')}</span></div>`;
+  h += '</div>';
+  h += `<div class="wiz-hint">${t('longPressHint')}</div>`;
+  return h;
 }
 
 function tilesHtml(dict, selected, act, multi) {
@@ -104,6 +134,51 @@ function tilesHtml(dict, selected, act, multi) {
   return h + '</div>';
 }
 
+function wizComputedDays() {
+  if (wiz.dateFrom && wiz.dateTo) {
+    return Math.round((new Date(wiz.dateTo) - new Date(wiz.dateFrom)) / 86400000) + 1;
+  }
+  return null;
+}
+
+function calendarHtml() {
+  const y = wiz.calY, m = wiz.calM;
+  const first = new Date(y, m, 1);
+  const startDow = (first.getDay() + 6) % 7; // Montag = 0
+  const dim = new Date(y, m + 1, 0).getDate();
+  const title = first.toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
+  // 2024-01-01 war ein Montag → liefert lokalisierte Mo–So-Kürzel
+  const dows = [...Array(7)].map((_, i) => new Date(2024, 0, 1 + i).toLocaleDateString(locale(), { weekday: 'short' }).slice(0, 2));
+  let h = `<div class="cal">
+    <div class="cal-head">
+      <button data-act="cal-nav" data-d="-1">‹</button>
+      <span class="cal-title">${title}</span>
+      <button data-act="cal-nav" data-d="1">›</button>
+    </div>
+    <div class="cal-grid">${dows.map(d => `<div class="dow">${d}</div>`).join('')}`;
+  for (let i = 0; i < startDow; i++) h += '<div></div>';
+  const todayIso = localIso(new Date());
+  for (let d = 1; d <= dim; d++) {
+    const iso = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+    const cls = ['cal-day'];
+    if (iso === todayIso) cls.push('today');
+    if (iso === wiz.dateFrom) cls.push('range-start');
+    if (iso === wiz.dateTo) cls.push('range-end');
+    if (wiz.dateFrom && wiz.dateTo && iso > wiz.dateFrom && iso < wiz.dateTo) cls.push('in-range');
+    h += `<button class="${cls.join(' ')}" data-act="cal-day" data-iso="${iso}">${d}</button>`;
+  }
+  h += '</div>';
+  let info = t('selectDates');
+  const days = wizComputedDays();
+  if (days) {
+    info = `<b>${fmtShort(wiz.dateFrom)} – ${fmtShort(wiz.dateTo)}</b> · ${t('duration')}: <b>${days} ${days === 1 ? t('day') : t('days')}</b>`;
+  } else if (wiz.dateFrom) {
+    info = `<b>${fmtShort(wiz.dateFrom)}</b> – ?`;
+  }
+  h += `<div class="cal-info">${info}</div></div>`;
+  return h;
+}
+
 function renderWizard() {
   const step = WIZ_STEPS[wiz.step];
   let html = `<div class="topbar">
@@ -114,25 +189,20 @@ function renderWizard() {
 
   if (step === 'type') {
     html += `<div class="wiz-title">${t('wizTripType')}</div><div class="wiz-hint">${t('wizTripTypeHint')}</div>`;
-    html += tilesHtml(TRIP_TYPES, wiz.tripType, 'wiz-type', false);
+    html += editableTilesHtml('tripTypes', wiz.tripType, 'wiz-type', false);
   } else if (step === 'details') {
     html += `<div class="wiz-title">${t('wizDetails')}</div>
       <div class="field"><label>${t('wizDest')}</label>
         <input id="w-dest" type="text" placeholder="${t('wizDestPh')}" value="${esc(wiz.dest)}"></div>
-      <div class="row2">
-        <div class="field"><label>${t('wizFrom')}</label><input id="w-from" type="date" value="${wiz.dateFrom}"></div>
-        <div class="field"><label>${t('wizTo')}</label><input id="w-to" type="date" value="${wiz.dateTo}"></div>
-      </div>
-      <div class="field"><label>${t('wizDays')}</label>
-        <input id="w-days" type="number" min="1" max="99" inputmode="numeric" value="${esc(wiz.days)}"></div>
+      ${calendarHtml()}
       <div class="field"><label>${t('wizListName')}</label>
         <input id="w-name" type="text" value="${esc(wiz.name)}" placeholder="${esc(defaultListName())}"></div>`;
   } else if (step === 'transport') {
     html += `<div class="wiz-title">${t('wizTransport')}</div><div class="wiz-hint">${t('wizTransportHint')}</div>`;
-    html += tilesHtml(TRANSPORT, wiz.transport, 'wiz-transport', true);
+    html += editableTilesHtml('transport', wiz.transport, 'wiz-transport', true);
   } else if (step === 'luggage') {
     html += `<div class="wiz-title">${t('wizLuggage')}</div><div class="wiz-hint">${t('wizTransportHint')}</div>`;
-    html += tilesHtml(LUGGAGE, wiz.luggage, 'wiz-luggage', true);
+    html += editableTilesHtml('luggage', wiz.luggage, 'wiz-luggage', true);
     if (wiz.transport.includes('flugzeug')) {
       html += `<div class="field"><label>${t('wizBagOption')}</label>
         <div class="seg">
@@ -145,12 +215,12 @@ function renderWizard() {
     html += tilesHtml(CLIMATE, wiz.climate, 'wiz-climate', true);
   } else if (step === 'activities') {
     html += `<div class="wiz-title">${t('wizActivities')}</div><div class="wiz-hint">${t('wizActivitiesHint')}</div>`;
-    html += tilesHtml(ACTIVITIES, wiz.activities, 'wiz-activity', true);
+    html += editableTilesHtml('activities', wiz.activities, 'wiz-activity', true);
   }
 
   const last = wiz.step === WIZ_STEPS.length - 1;
   const canNext = step !== 'type' || !!wiz.tripType;
-  html += `<div class="bottombar">
+  html += `<div style="height:70px"></div><div class="bottombar">
     <button class="btn" data-act="wiz-next" ${canNext ? '' : 'disabled'}>${last ? t('wizCreate') : t('next')}</button>
   </div>`;
   $app.innerHTML = html;
@@ -159,9 +229,9 @@ function renderWizard() {
 function defaultListName() {
   const parts = [];
   if (wiz.dest) parts.push(wiz.dest);
-  else if (wiz.tripType) parts.push(optName(TRIP_TYPES, wiz.tripType));
-  const d = wiz.days || (wiz.dateFrom && wiz.dateTo ? Math.round((new Date(wiz.dateTo) - new Date(wiz.dateFrom)) / 86400000) + 1 : null);
-  if (d) parts.push(d + ' ' + (d == 1 ? t('day') : t('days')));
+  else if (wiz.tripType) { const ti = tileInfo('tripTypes', wiz.tripType); if (ti) parts.push(ti.label); }
+  const d = wizComputedDays();
+  if (d) parts.push(d + ' ' + (d === 1 ? t('day') : t('days')));
   return parts.join(', ') || t('newList');
 }
 
@@ -169,9 +239,6 @@ function wizReadDetails() {
   const g = id => document.getElementById(id);
   if (!g('w-dest')) return;
   wiz.dest = g('w-dest').value.trim();
-  wiz.dateFrom = g('w-from').value;
-  wiz.dateTo = g('w-to').value;
-  wiz.days = g('w-days').value ? parseInt(g('w-days').value, 10) : '';
   wiz.name = g('w-name').value.trim();
 }
 
@@ -179,13 +246,13 @@ function wizNext() {
   if (WIZ_STEPS[wiz.step] === 'details') wizReadDetails();
   if (wiz.step < WIZ_STEPS.length - 1) { wiz.step++; render(); window.scrollTo(0, 0); return; }
   // Liste erstellen
-  const days = wiz.days || (wiz.dateFrom && wiz.dateTo ? Math.round((new Date(wiz.dateTo) - new Date(wiz.dateFrom)) / 86400000) + 1 : 7);
+  const days = wizComputedDays() || 7;
   const list = {
     id: uid(),
     name: wiz.name || defaultListName(),
     dest: wiz.dest,
     dateFrom: wiz.dateFrom, dateTo: wiz.dateTo,
-    days: wiz.days || null,
+    days: null,
     tripType: wiz.tripType,
     activities: wiz.activities,
     transport: wiz.transport,
@@ -199,6 +266,90 @@ function wizNext() {
   saveState();
   go({ name: 'list', id: list.id });
 }
+
+// ---------------- Kachel-Editor (lange drücken / +) ----------------
+function tileEditModal(dictName, key) {
+  const info = tileInfo(dictName, key);
+  if (!info) return;
+  showModal(`<h3>${t('editTile')}</h3>
+    <div class="row2">
+      <div class="field"><label>${t('tileName')}</label><input id="te-name" type="text" value="${esc(info.label)}"></div>
+      <div class="field"><label>${t('tileIcon')}</label><input id="te-icon" type="text" value="${esc(info.icon)}" maxlength="4"></div>
+    </div>
+    <button class="btn" data-act="tile-edit-save" data-dict="${dictName}" data-key="${key}">${t('save')}</button>
+    <button class="btn danger" data-act="tile-remove" data-dict="${dictName}" data-key="${key}">${t('remove')}</button>
+    <button class="btn secondary" data-act="close-modal">${t('cancel')}</button>`);
+}
+
+function tileAddModal(dictName) {
+  showModal(`<h3>＋ ${t('addTile')}</h3>
+    <div class="row2">
+      <div class="field"><label>${t('tileName')}</label><input id="te-name" type="text"></div>
+      <div class="field"><label>${t('tileIcon')}</label><input id="te-icon" type="text" placeholder="🔖" maxlength="4"></div>
+    </div>
+    <button class="btn" data-act="tile-add-save" data-dict="${dictName}">${t('add')}</button>
+    <button class="btn secondary" data-act="close-modal">${t('cancel')}</button>`);
+}
+
+function saveTileEdit(dictName, key) {
+  const name = document.getElementById('te-name').value.trim();
+  const icon = document.getElementById('te-icon').value.trim();
+  if (!name) return;
+  const custom = state.custom[dictName].find(c => c.id === key);
+  if (custom) {
+    custom.name = name; custom.icon = icon || custom.icon;
+  } else {
+    state.overrides[dictName][key] = Object.assign(state.overrides[dictName][key] || {}, { name, icon: icon || undefined });
+  }
+  saveState(); closeModal(); render();
+}
+
+function removeTile(dictName, key) {
+  const idx = state.custom[dictName].findIndex(c => c.id === key);
+  if (idx >= 0) state.custom[dictName].splice(idx, 1);
+  else state.overrides[dictName][key] = Object.assign(state.overrides[dictName][key] || {}, { hidden: true });
+  // Aus aktueller Wizard-Auswahl entfernen
+  if (wiz) {
+    if (wiz.tripType === key) wiz.tripType = null;
+    ['transport', 'luggage', 'activities'].forEach(f => {
+      const i = wiz[f].indexOf(key); if (i >= 0) wiz[f].splice(i, 1);
+    });
+  }
+  saveState(); closeModal(); render();
+}
+
+function saveTileAdd(dictName) {
+  const name = document.getElementById('te-name').value.trim();
+  const icon = document.getElementById('te-icon').value.trim() || '🔖';
+  if (!name) return;
+  state.custom[dictName].push({ id: 'ct_' + uid(), name, icon, items: [] });
+  saveState(); closeModal(); render();
+}
+
+// Lange drücken auf Kacheln (Touch + Maus) und Rechtsklick (Desktop)
+let lpTimer = null, lpFired = false, lpStart = null;
+document.addEventListener('pointerdown', e => {
+  const tile = e.target.closest('.tile[data-dict]');
+  if (!tile) return;
+  lpFired = false;
+  lpStart = { x: e.clientX, y: e.clientY };
+  lpTimer = setTimeout(() => {
+    lpFired = true;
+    tileEditModal(tile.dataset.dict, tile.dataset.key);
+  }, 500);
+});
+document.addEventListener('pointermove', e => {
+  if (lpTimer && lpStart && Math.hypot(e.clientX - lpStart.x, e.clientY - lpStart.y) > 12) {
+    clearTimeout(lpTimer); lpTimer = null;
+  }
+});
+['pointerup', 'pointercancel'].forEach(ev => document.addEventListener(ev, () => {
+  if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; }
+}));
+document.addEventListener('contextmenu', e => {
+  const tile = e.target.closest('.tile[data-dict]');
+  if (tile) { e.preventDefault(); tileEditModal(tile.dataset.dict, tile.dataset.key); }
+});
 
 // ---------------- List (Editor) ----------------
 function groupByCat(items) {
@@ -220,7 +371,7 @@ function renderList() {
   let html = `<div class="topbar">
     <button class="iconbtn" data-act="home">←</button>
     <div style="flex:1;min-width:0"><h1>${esc(list.name)}</h1><div class="sub">${listMeta(list)}</div></div>
-    <button class="iconbtn" data-act="list-menu">⋯</button>
+    <button class="iconbtn" data-act="list-menu" data-id="${list.id}">⋯</button>
   </div>`;
   html += `<div class="legend">
     <span><i style="background:var(--prio1)"></i>${t('prio1')}</span>
@@ -228,7 +379,8 @@ function renderList() {
     <span><i style="background:var(--prio3)"></i>${t('prio3')}</span>
   </div>`;
   for (const g of groupByCat(list.items)) {
-    html += `<div class="cat-section"><div class="cat-head">${catIcon(g.cat)} ${esc(catName(g.cat))} <span class="count">(${g.items.length})</span></div>`;
+    html += `<div class="cat-section"><div class="cat-head">${catIcon(g.cat)} ${esc(catName(g.cat))} <span class="count">(${g.items.length})</span>
+      <button class="cat-add" data-act="add-item-cat" data-cat="${g.cat}" title="${t('addItem')}">＋</button></div>`;
     for (const it of g.items) {
       html += `<div class="item">
         <div class="prio-dot" data-p="${it.p}" data-act="cycle-prio" data-id="${it.id}" title="${t('priority')}"></div>
@@ -283,20 +435,23 @@ function prioSelectHtml(id, selected) {
   return h + '</select>';
 }
 
-function addItemModal(listId, tab) {
+// tab: 'catalog' | 'new'; onlyCat: optional Kategorie-Filter (über Kategorie-＋)
+function addItemModal(listId, tab, onlyCat) {
   tab = tab || 'catalog';
   const list = getList(listId);
-  let inner = `<h3>${t('addItem')}</h3>
+  const catAttr = onlyCat ? `data-cat="${onlyCat}"` : '';
+  let inner = `<h3>${t('addItem')}${onlyCat ? ' – ' + catIcon(onlyCat) + ' ' + esc(catName(onlyCat)) : ''}</h3>
     <div class="seg" style="margin-bottom:12px">
-      <button class="${tab === 'catalog' ? 'sel' : ''}" data-act="additem-tab" data-key="catalog" data-list="${listId}">${t('fromCatalog')}</button>
-      <button class="${tab === 'new' ? 'sel' : ''}" data-act="additem-tab" data-key="new" data-list="${listId}">${t('newItem')}</button>
+      <button class="${tab === 'catalog' ? 'sel' : ''}" data-act="additem-tab" data-key="catalog" data-list="${listId}" ${catAttr}>${t('fromCatalog')}</button>
+      <button class="${tab === 'new' ? 'sel' : ''}" data-act="additem-tab" data-key="new" data-list="${listId}" ${catAttr}>${t('newItem')}</button>
     </div>`;
   if (tab === 'catalog') {
     const inList = new Set(list.items.map(i => i.k).filter(Boolean));
     // Eigene Artikel zuoberst
-    if (state.customItems.length) {
+    const ownItems = state.customItems.filter(ci => !onlyCat || ci.cat === onlyCat);
+    if (ownItems.length) {
       inner += `<div class="cat-head" style="margin-top:8px">⭐ ${t('customItems')}</div><div class="tiles">`;
-      for (const ci of state.customItems) {
+      for (const ci of ownItems) {
         const sel = inList.has(ci.id);
         inner += `<div class="tile ${sel ? 'sel' : ''}" data-act="pick-item" data-list="${listId}" data-key="${ci.id}">
           <span class="emoji">${catIcon(ci.cat)}</span><span class="lbl">${esc(ci.name)}</span></div>`;
@@ -304,13 +459,14 @@ function addItemModal(listId, tab) {
       inner += '</div>';
     }
     for (const c of allCatIds()) {
+      if (onlyCat && c !== onlyCat) continue;
       const keys = Object.keys(ITEMS).filter(k => ITEMS[k][0] === c);
       if (!keys.length) continue;
       inner += `<div class="cat-head" style="margin-top:8px">${catIcon(c)} ${esc(catName(c))}</div><div class="tiles">`;
       for (const k of keys) {
         const sel = inList.has(k);
         inner += `<div class="tile ${sel ? 'sel' : ''}" data-act="pick-item" data-list="${listId}" data-key="${k}">
-          <span class="emoji">${catIcon(c)}</span><span class="lbl">${esc(itemDefName(k))}</span></div>`;
+          <span class="emoji">${itemEmoji(k, c)}</span><span class="lbl">${esc(itemDefName(k))}</span></div>`;
       }
       inner += '</div>';
     }
@@ -319,7 +475,7 @@ function addItemModal(listId, tab) {
     inner += `
       <div class="field"><label>${t('itemName')}</label><input id="ni-name" type="text" placeholder="${t('itemNamePh')}"></div>
       <div class="row2">
-        <div class="field"><label>${t('category')}</label>${catSelectHtml('ni-cat', 'sonstiges')}</div>
+        <div class="field"><label>${t('category')}</label>${catSelectHtml('ni-cat', onlyCat || 'sonstiges')}</div>
         <div class="field"><label>${t('quantity')}</label><input id="ni-qty" type="number" min="1" value="1" inputmode="numeric"></div>
       </div>
       <div class="field"><label>${t('priority')}</label>${prioSelectHtml('ni-prio', 2)}</div>
@@ -346,7 +502,7 @@ function pickItem(listId, key, tileEl) {
       c: def ? def[0] : ci.cat,
       q: def ? computeQty(def[3], days) : (ci.defQty || 1),
       p: def ? def[4] : (ci.prio || 2),
-      lm: def ? !!def[5] : !!ci.lastMinute,
+      lm: def ? false : !!ci.lastMinute,
       packed: false,
     });
     tileEl.classList.add('sel');
@@ -360,7 +516,7 @@ function saveNewItem(listId) {
   const cat = document.getElementById('ni-cat').value;
   const qty = Math.max(1, parseInt(document.getElementById('ni-qty').value, 10) || 1);
   const prio = parseInt(document.getElementById('ni-prio').value, 10);
-  const lm = document.getElementById('ni-lm').checked;
+  const lm = document.getElementById('ni-lm') ? document.getElementById('ni-lm').checked : false;
   const saveCat = document.getElementById('ni-save').checked;
   let key = null;
   if (saveCat) {
@@ -382,6 +538,7 @@ function editItemModal(listId, itemId) {
   const list = getList(listId);
   const it = list.items.find(i => i.id === itemId);
   if (!it) return;
+  const isCustomRef = it.k && state.customItems.some(c => c.id === it.k);
   showModal(`<h3>${t('editItem')}</h3>
     <div class="field"><label>${t('itemName')}</label><input id="ei-name" type="text" value="${esc(listItemName(it))}"></div>
     <div class="row2">
@@ -390,6 +547,7 @@ function editItemModal(listId, itemId) {
     </div>
     <div class="field"><label>${t('priority')}</label>${prioSelectHtml('ei-prio', it.p)}</div>
     <div class="field"><label><input type="checkbox" id="ei-lm" style="width:auto" ${it.lm ? 'checked' : ''}> ${t('lastMinute')}</label></div>
+    <div class="field"><label><input type="checkbox" id="ei-save" style="width:auto" ${isCustomRef || it.n ? 'checked' : ''}> ${t('saveToCatalog')}</label></div>
     <button class="btn" data-act="edit-item-save" data-list="${listId}" data-id="${itemId}">${t('save')}</button>
     <button class="btn secondary" data-act="close-modal">${t('cancel')}</button>`);
 }
@@ -403,6 +561,18 @@ function saveEditItem(listId, itemId) {
   it.q = Math.max(1, parseInt(document.getElementById('ei-qty').value, 10) || 1);
   it.p = parseInt(document.getElementById('ei-prio').value, 10);
   it.lm = document.getElementById('ei-lm').checked;
+  // Bearbeitete Artikel optional in "Meine Artikel" übernehmen/aktualisieren
+  if (document.getElementById('ei-save').checked) {
+    const existing = it.k && state.customItems.find(c => c.id === it.k);
+    if (existing) {
+      existing.name = listItemName(it); existing.cat = it.c;
+      existing.defQty = it.q; existing.prio = it.p; existing.lastMinute = it.lm;
+    } else {
+      const ci = { id: uid(), name: listItemName(it), cat: it.c, defQty: it.q, prio: it.p, lastMinute: it.lm };
+      state.customItems.push(ci);
+      it.k = ci.id;
+    }
+  }
   saveState();
   closeModal();
   render();
@@ -598,6 +768,7 @@ function catalogAddModal() {
 // ---------------- Settings ----------------
 function renderSettings() {
   const s = state.settings;
+  const cname = c => COUNTRY_NAMES[c] ? (s.lang === 'en' ? COUNTRY_NAMES[c].en : COUNTRY_NAMES[c].de) : c;
   let html = `<div class="topbar">
     <button class="iconbtn" data-act="home">←</button>
     <h1>⚙️ ${t('settings')}</h1>
@@ -614,7 +785,7 @@ function renderSettings() {
       <button data-act="set-theme" data-key="system" class="${s.theme === 'system' ? 'sel' : ''}">${t('themeSystem')}</button>
     </div></div>
   <div class="field"><label>${t('homeCountry')} · ${t('homeCountryHint')}</label>
-    <select id="set-country">${COUNTRIES.map(c => `<option value="${c}" ${c === s.homeCountry ? 'selected' : ''}>${c}</option>`).join('')}</select>
+    <select id="set-country">${COUNTRIES.map(c => `<option value="${c}" ${c === s.homeCountry ? 'selected' : ''}>${esc(cname(c))}</option>`).join('')}</select>
   </div>
   <button class="btn secondary" data-act="export-backup">💾 ${t('exportData')}</button>
   <button class="btn secondary" data-act="import-trigger">📥 ${t('importData')}</button>
@@ -664,6 +835,7 @@ function checkShareHash() {
 
 // ================= EVENTS =================
 document.addEventListener('click', e => {
+  if (lpFired) { lpFired = false; return; } // Klick nach Long-Press unterdrücken
   const el = e.target.closest('[data-act]');
   if (!el) return;
   const act = el.dataset.act, id = el.dataset.id, key = el.dataset.key;
@@ -686,6 +858,26 @@ document.addEventListener('click', e => {
     case 'wiz-climate': toggleArr(wiz.climate, key); render(); break;
     case 'wiz-activity': toggleArr(wiz.activities, key); render(); break;
     case 'wiz-bag': wiz.bagOption = key; render(); break;
+    // Kalender
+    case 'cal-nav': {
+      wizReadDetails();
+      let m = wiz.calM + parseInt(el.dataset.d, 10);
+      if (m < 0) { m = 11; wiz.calY--; } else if (m > 11) { m = 0; wiz.calY++; }
+      wiz.calM = m; render(); break;
+    }
+    case 'cal-day': {
+      wizReadDetails();
+      const iso = el.dataset.iso;
+      if (!wiz.dateFrom || (wiz.dateFrom && wiz.dateTo)) { wiz.dateFrom = iso; wiz.dateTo = ''; }
+      else if (iso < wiz.dateFrom) { wiz.dateFrom = iso; }
+      else { wiz.dateTo = iso; }
+      render(); break;
+    }
+    // Kachel-Editor
+    case 'tile-add': tileAddModal(el.dataset.dict); break;
+    case 'tile-add-save': saveTileAdd(el.dataset.dict); break;
+    case 'tile-edit-save': saveTileEdit(el.dataset.dict, el.dataset.key); break;
+    case 'tile-remove': removeTile(el.dataset.dict, el.dataset.key); break;
     // List editor
     case 'cycle-prio': cyclePrio(list, id); break;
     case 'qty': changeQty(list, id, parseInt(el.dataset.d, 10)); break;
@@ -693,19 +885,22 @@ document.addEventListener('click', e => {
     case 'edit-item': editItemModal(view.id, id); break;
     case 'edit-item-save': saveEditItem(el.dataset.list, id); break;
     case 'add-item': addItemModal(view.id); break;
-    case 'additem-tab': addItemModal(el.dataset.list, key); break;
+    case 'add-item-cat': addItemModal(view.id, 'new', el.dataset.cat); break;
+    case 'additem-tab': addItemModal(el.dataset.list, key, el.dataset.cat); break;
     case 'pick-item': pickItem(el.dataset.list, key, el); break;
     case 'new-item-save': saveNewItem(el.dataset.list || null); break;
     case 'add-cat': addCatModal(); break;
     case 'new-cat-save': saveNewCat(); break;
-    case 'list-menu': listMenuModal(view.id); break;
+    case 'list-menu': listMenuModal(id); break;
     case 'rename-list': {
-      const name = prompt(t('wizListName'), list.name);
-      if (name && name.trim()) { list.name = name.trim(); saveState(); }
+      const l = getList(id);
+      const name = prompt(t('wizListName'), l.name);
+      if (name && name.trim()) { l.name = name.trim(); saveState(); }
       closeModal(); render(); break;
     }
     case 'duplicate-list': {
-      const copy = JSON.parse(JSON.stringify(list));
+      const l = getList(id);
+      const copy = JSON.parse(JSON.stringify(l));
       copy.id = uid(); copy.name += ' (2)';
       copy.items.forEach(i => { i.id = uid(); i.packed = false; });
       state.lists.unshift(copy); saveState(); closeModal();
@@ -714,11 +909,13 @@ document.addEventListener('click', e => {
     case 'share-list': closeModal(); shareModal(id); break;
     case 'share-file': closeModal(); shareList(id); break;
     case 'share-link': closeModal(); shareListLink(id); break;
-    case 'reset-packing': list.items.forEach(i => i.packed = false); saveState(); closeModal(); render(); break;
+    case 'reset-packing': getList(id).items.forEach(i => i.packed = false); saveState(); closeModal(); render(); break;
     case 'delete-list':
       if (confirm(t('deleteListConfirm'))) {
-        state.lists = state.lists.filter(l => l.id !== view.id);
-        saveState(); closeModal(); go({ name: 'home' }); toast(t('deleted'));
+        state.lists = state.lists.filter(l => l.id !== id);
+        saveState(); closeModal();
+        if (view.name === 'home') render(); else go({ name: 'home' });
+        toast(t('deleted'));
       }
       break;
     // Packing

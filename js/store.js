@@ -9,10 +9,16 @@ function defaultState() {
     customItems: [],
     // Eigene Kategorien: {id, name, icon}
     customCats: [],
+    // Eigene Kacheln pro Auswahl-Screen: {id, name, icon, items?}
+    custom: { tripTypes: [], transport: [], luggage: [], activities: [] },
+    // Anpassungen an Standard-Kacheln: key -> {name?, icon?, hidden?}
+    overrides: { tripTypes: {}, transport: {}, luggage: {}, activities: {} },
     // Packlisten
     lists: [],
   };
 }
+
+const TILE_DICTS = { tripTypes: () => TRIP_TYPES, transport: () => TRANSPORT, luggage: () => LUGGAGE, activities: () => ACTIVITIES };
 
 let state = loadState();
 
@@ -78,6 +84,37 @@ function optName(dict, key) {
   return state.settings.lang === 'en' ? o.en : o.de;
 }
 
+function itemEmoji(key, cat) {
+  return (typeof ITEM_EMOJI !== 'undefined' && ITEM_EMOJI[key]) || catIcon(cat);
+}
+
+// Effektive Kachel-Einträge eines Screens: Standards (ohne versteckte, mit
+// Overrides) + eigene Einträge. Rückgabe: [{key, label, icon, items, custom}]
+function tileEntries(dictName) {
+  const base = TILE_DICTS[dictName]();
+  const out = [];
+  for (const k in base) {
+    const ov = state.overrides[dictName][k] || {};
+    if (ov.hidden) continue;
+    out.push({ key: k, label: ov.name || optName(base, k), icon: ov.icon || base[k].icon, items: base[k].items || [], custom: false });
+  }
+  for (const c of state.custom[dictName]) {
+    out.push({ key: c.id, label: c.name, icon: c.icon || '🔖', items: c.items || [], custom: true });
+  }
+  return out;
+}
+
+// Info zu einer Kachel (auch versteckte Standards, für bestehende Listen)
+function tileInfo(dictName, key) {
+  const base = TILE_DICTS[dictName]();
+  if (base[key]) {
+    const ov = state.overrides[dictName][key] || {};
+    return { label: ov.name || optName(base, key), icon: ov.icon || base[key].icon, items: base[key].items || [], custom: false };
+  }
+  const c = state.custom[dictName].find(x => x.id === key);
+  return c ? { label: c.name, icon: c.icon || '🔖', items: c.items || [], custom: true } : null;
+}
+
 // ---- Listen-Erstellung aus Templates ----
 function computeQty(def, days) {
   if (def === 'D') return Math.max(2, Math.min((days || 7) + 1, 10));
@@ -87,11 +124,12 @@ function computeQty(def, days) {
 function buildListItems(tripType, activities, transport, climate, days) {
   const keys = [];
   const push = (arr) => (arr || []).forEach(k => { if (!keys.includes(k)) keys.push(k); });
-  push((TRIP_TYPES[tripType] || {}).items);
-  (activities || []).forEach(a => push((ACTIVITIES[a] || {}).items));
-  (transport || []).forEach(tr => push((TRANSPORT[tr] || {}).items));
+  const tt = tileInfo('tripTypes', tripType);
+  push(tt ? tt.items : []);
+  (activities || []).forEach(a => { const x = tileInfo('activities', a); push(x ? x.items : []); });
+  (transport || []).forEach(tr => { const x = tileInfo('transport', tr); push(x ? x.items : []); });
   (climate || []).forEach(cl => push((CLIMATE[cl] || {}).items));
-  return keys.map(k => {
+  return keys.filter(k => ITEMS[k]).map(k => {
     const def = ITEMS[k];
     return {
       id: uid(),
@@ -100,7 +138,7 @@ function buildListItems(tripType, activities, transport, climate, days) {
       c: def[0],
       q: computeQty(def[3], days),
       p: def[4],
-      lm: !!def[5],
+      lm: false,        // Last-Minute nur manuell setzen, keine Defaults
       packed: false,
     };
   });

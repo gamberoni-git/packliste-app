@@ -205,6 +205,7 @@ const TRIP_TYPES = {
     items: ['idkarte','kreditkarte','tickets','buchungen','unterhosen','socken','laufsocken','tshirts','running_hose','running_shirt','pullover','pyjama','laufschuhe','sneakers','regenjacke','zahnbuerste','zahnpasta','deo','duschgel','medis','schmerzmittel','blasenpflaster','elektrolyte','handy_ladekabel','laufuhr','laufgurt','gels','startnummernband','sonnenbrille','trinkflasche','schluessel'] },
   tauchferien:  { de: 'Tauchferien', en: 'Diving holiday', icon: '🤿',
     items: ['reisepass','kreditkarte','bargeld','tickets','buchungen','versicherungskarte','unterhosen','socken','tshirts','shorts','badehose','pyjama','sandalen','flipflops','sneakers','zahnbuerste','zahnpasta','deo','duschgel','sonnencreme','after_sun','medis','reisetabletten','durchfallmittel','insektenschutz','handy_ladekabel','powerbank','adapter','sonnenbrille','sonnenhut','badetuch','tauchcomputer','maske_schnorchel','flossen','neoprenanzug','tauchschein','buch','schluessel'] },
+  leer:         { de: 'Leere Liste', en: 'Empty list', icon: '📝', items: [] },
   bikeferien:   { de: 'Bikeferien', en: 'Bike holiday', icon: '🚵',
     items: ['idkarte','kreditkarte','bargeld','buchungen','unterhosen','socken','tshirts','radhose','radtrikot','shorts','pullover','pyjama','radschuhe','sneakers','regenjacke','windweste','zahnbuerste','zahnpasta','deo','duschgel','sonnencreme','medis','schmerzmittel','pflaster','handy_ladekabel','powerbank','velohelm','radhandschuhe','radbrille','flickzeug','veloschloss','velolicht','trinkflasche','erste_hilfe','schluessel'] },
 };
@@ -266,3 +267,53 @@ const CLIMATE = {
 
 // Länder (Auswahl für Settings, Basis für spätere Adapter-Hinweise)
 const COUNTRIES = ['CH','DE','AT','FR','IT','ES','PT','GB','US','other'];
+const COUNTRY_NAMES = {
+  CH: { de: 'Schweiz', en: 'Switzerland' },
+  DE: { de: 'Deutschland', en: 'Germany' },
+  AT: { de: 'Österreich', en: 'Austria' },
+  FR: { de: 'Frankreich', en: 'France' },
+  IT: { de: 'Italien', en: 'Italy' },
+  ES: { de: 'Spanien', en: 'Spain' },
+  PT: { de: 'Portugal', en: 'Portugal' },
+  GB: { de: 'Grossbritannien', en: 'United Kingdom' },
+  US: { de: 'USA', en: 'United States' },
+  other: { de: 'Anderes Land', en: 'Other country' },
+};
+
+// Spezifische Emojis pro Artikel (Fallback: Kategorie-Icon)
+const ITEM_EMOJI = {
+  reisepass: '🛂', idkarte: '🪪', fuehrerschein: '🪪', kreditkarte: '💳', bargeld: '💵',
+  tickets: '🎫', buchungen: '📄', versicherungskarte: '🏥', impfausweis: '💉',
+  unterhosen: '🩲', socken: '🧦', tshirts: '👕', hemden: '👔', hosen_lang: '👖', jeans: '👖',
+  shorts: '🩳', pullover: '🧶', pyjama: '🛌', guertel: '➰', badehose: '🩱',
+  funktionsshirts: '🎽', wandersocken: '🧦', laufsocken: '🧦', running_hose: '🩳',
+  running_shirt: '🎽', radhose: '🚴', radtrikot: '🚴', thermounterwaesche: '🧊',
+  skisocken: '🧦', business_hemden: '👔', anzug: '🤵', krawatte: '👔', blazer: '🧥',
+  sneakers: '👟', wanderschuhe: '🥾', laufschuhe: '👟', sandalen: '🩴', flipflops: '🩴',
+  business_schuhe: '👞', skischuhe: '🎿', radschuhe: '👟', huettenschuhe: '🥿',
+  regenjacke: '🌧️', daunenjacke: '🧥', fleecejacke: '🧥', softshell: '🧥',
+  skijacke: '🎿', skihose: '🎿', windweste: '🦺', mantel: '🧥',
+  zahnbuerste: '🪥', zahnpasta: '🦷', deo: '🧴', duschgel: '🧴', shampoo: '🧴',
+  rasierer: '🪒', sonnencreme: '🧴', after_sun: '🧴', kontaktlinsen: '👓',
+  linsenmittel: '💧', nagelset: '💅', ohrstoepsel: '👂', taschentuecher: '🤧',
+  labello: '💄', haarbuerste: '🪮',
+  medis: '💊', schmerzmittel: '💊', pflaster: '🩹', blasenpflaster: '🩹',
+  desinfektion: '🧼', insektenschutz: '🦟', reisetabletten: '🤢', durchfallmittel: '💊', elektrolyte: '🧂',
+  handy_ladekabel: '🔌', powerbank: '🔋', adapter: '🔌', kopfhoerer: '🎧', laptop: '💻',
+  tablet: '📱', kamera: '📷', kamera_zubehoer: '💾', ebook_reader: '📖',
+  smartwatch_kabel: '⌚', steckerleiste: '🔌', auto_ladekabel: '🚗',
+  taschenmesser: '🔪', stirnlampe: '🔦', fernglas: '🔭', packwuerfel: '🧊',
+  waeschebeutel: '🧺', reisekissen: '💤', schlafmaske: '😴', trinkflasche: '🚰',
+  thermosflasche: '☕', vorhaengeschloss: '🔒', regenschirm: '☂️', sonnenbrille: '🕶️',
+  buch: '📕', zeitschriften: '📰', spiele: '🎲', kartenspiel: '🃏', reisefuehrer: '🗺️', tagebuch: '📓',
+  laufuhr: '⌚', laufgurt: '🎽', gels: '🍬', startnummernband: '🏷️', wanderstoecke: '🥢',
+  rucksack_regenhuelle: '🎒', wanderkarte: '🗺️', erste_hilfe: '⛑️', schlafsack_huette: '🛏️',
+  tauchcomputer: '⌚', maske_schnorchel: '🤿', flossen: '🐬', neoprenanzug: '🥽',
+  tauchschein: '📇', schwimmbrille: '🥽', velohelm: '⛑️', radhandschuhe: '🧤',
+  radbrille: '🕶️', flickzeug: '🔧', veloschloss: '🔒', velolicht: '💡',
+  badetuch: '🏖️', strandtasche: '👜', sonnenhut: '👒', luftmatratze: '🛟', kuehltasche: '🧊',
+  muetze: '🧢', handschuhe: '🧤', schal: '🧣', skihandschuhe: '🧤', skibrille: '🥽',
+  skihelm: '⛑️', handwaermer: '🔥', felle: '🦭', lvs: '📡', schaufel_sonde: '🪏',
+  tourenstoecke: '🥢', harscheisen: '⚙️',
+  schluessel: '🔑', snacks: '🍫', waschmittel: '🧼', zip_beutel: '🛍️', muellsack: '🗑️', daypack_item: '🎒',
+};
