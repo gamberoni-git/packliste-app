@@ -174,8 +174,12 @@ const I18N = {
     adapterMaybe: 'Eurostecker (Typ C) passt – Adapter für 3-polige Stecker empfohlen',
     sockets: 'Steckdosen',
     addAdapterBtn: 'Adapter auf die Liste',
-    destCountry: 'Land (für Adapter-Hinweis)',
-    noCountry: '– kein Land –',
+    destCountry: 'Länder (für Adapter-Hinweis)',
+    noCountry: '– Land wählen –',
+    editEntry: 'Eintrag bearbeiten',
+    safeUser: 'E-Mail / Benutzername (für den Passwort-Manager)',
+    safeUserHint: 'Optional. Damit kann iOS die Passphrase im Passwort-Manager (iCloud-Schlüsselbund) speichern und beim Entsperren automatisch vorschlagen – deine "Passphrase vergessen"-Absicherung.',
+    passManagerHint: 'Tipp: Passphrase im Passwort-Manager gespeichert? iOS schlägt sie automatisch vor.',
   },
   en: {
     appName: 'PackList',
@@ -340,7 +344,11 @@ const I18N = {
     adapterMaybe: 'Europlug (type C) fits – adapter recommended for 3-pin plugs',
     sockets: 'Sockets',
     addAdapterBtn: 'Add adapter to list',
-    destCountry: 'Country (for adapter hint)',
-    noCountry: '– no country –',
+    destCountry: 'Countries (for adapter hint)',
+    noCountry: '– select country –',
+    editEntry: 'Edit entry',
+    safeUser: 'Email / username (for the password manager)',
+    safeUserHint: 'Optional. Lets iOS store the passphrase in the password manager (iCloud Keychain) and suggest it automatically when unlocking – your "forgot passphrase" safety net.',
+    passManagerHint: 'Tip: passphrase saved in the password manager? iOS will suggest it automatically.',
   }
 };

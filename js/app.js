@@ -105,7 +105,7 @@ const WIZ_STEPS = ['type', 'details', 'transport', 'luggage', 'climate', 'activi
 function startWizard() {
   const now = new Date();
   wiz = {
-    step: 0, tripType: null, dest: '', destCountry: '', dateFrom: '', dateTo: '', name: '',
+    step: 0, tripType: null, dest: '', destCountries: [], dateFrom: '', dateTo: '', name: '',
     transport: [], luggage: [], bagOption: 'carryon', climate: [], activities: [],
     calY: now.getFullYear(), calM: now.getMonth(),
   };
@@ -201,8 +201,14 @@ function renderWizard() {
       <div class="field"><label>${t('wizDest')}</label>
         <input id="w-dest" type="text" placeholder="${t('wizDestPh')}" value="${esc(wiz.dest)}"></div>
       <div class="field"><label>${t('destCountry')}</label>
-        <select id="w-country"><option value="">${t('noCountry')}</option>
-        ${codes.map(c => `<option value="${c}" ${c === wiz.destCountry ? 'selected' : ''}>${esc(cname(c))}</option>`).join('')}</select></div>
+        ${wiz.destCountries.length ? `<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+          ${wiz.destCountries.map(c => `<span class="btn small secondary" style="margin:0" data-act="wiz-country-del" data-key="${c}">${esc(cname(c))} ✕</span>`).join('')}
+        </div>` : ''}
+        <div style="display:flex;gap:8px">
+          <select id="w-country" style="flex:1"><option value="">${t('noCountry')}</option>
+          ${codes.filter(c => !wiz.destCountries.includes(c)).map(c => `<option value="${c}">${esc(cname(c))}</option>`).join('')}</select>
+          <button class="btn small secondary" style="margin:0;font-size:18px" data-act="wiz-country-add">＋</button>
+        </div></div>
       ${calendarHtml()}
       <div class="field"><label>${t('wizListName')}</label>
         <input id="w-name" type="text" value="${esc(wiz.name)}" placeholder="${esc(defaultListName())}"></div>`;
@@ -249,7 +255,9 @@ function wizReadDetails() {
   if (!g('w-dest')) return;
   wiz.dest = g('w-dest').value.trim();
   wiz.name = g('w-name').value.trim();
-  wiz.destCountry = g('w-country') ? g('w-country').value : wiz.destCountry;
+  // Noch im Dropdown gewähltes, aber nicht per + bestätigtes Land mitnehmen
+  const sel = g('w-country');
+  if (sel && sel.value && !wiz.destCountries.includes(sel.value)) wiz.destCountries.push(sel.value);
 }
 
 function wizNext() {
@@ -261,7 +269,7 @@ function wizNext() {
     id: uid(),
     name: wiz.name || defaultListName(),
     dest: wiz.dest,
-    destCountry: wiz.destCountry || null,
+    destCountries: wiz.destCountries.slice(),
     dateFrom: wiz.dateFrom, dateTo: wiz.dateTo,
     days: null,
     tripType: wiz.tripType,
@@ -389,14 +397,17 @@ function renderList() {
     <span><i style="background:var(--prio2)"></i>${t('prio2')}</span>
     <span><i style="background:var(--prio3)"></i>${t('prio3')}</span>
   </div>`;
-  // Adapter-Hinweis, wenn Ziel-Land bekannt
-  const ad = adapterInfo(list);
-  if (ad) {
-    const cls = ad.status === 'needed' ? '' : 'info';
-    const msg = ad.status === 'needed' ? t('adapterNeeded') : ad.status === 'maybe' ? t('adapterMaybe') : t('adapterNotNeeded');
+  // Adapter-Hinweis, wenn Ziel-Länder bekannt
+  const ads = adapterInfos(list);
+  if (ads.length) {
+    const anyNeeded = ads.some(a => a.status !== 'no');
     const hasAdapter = list.items.some(i => i.k === 'adapter');
-    html += `<div class="banner ${cls}">🔌 <b>${esc(ad.country)}</b>: ${t('sockets')} ${ad.plugs} · ${ad.volt} V — <b>${msg}</b>
-      ${ad.status !== 'no' && !hasAdapter ? `<br><button class="btn small" style="margin-top:8px" data-act="add-adapter">＋ ${t('addAdapterBtn')}</button>` : ''}</div>`;
+    const lines = ads.map(a => {
+      const msg = a.status === 'needed' ? t('adapterNeeded') : a.status === 'maybe' ? t('adapterMaybe') : t('adapterNotNeeded');
+      return `<b>${esc(a.country)}</b>: ${t('sockets')} ${a.plugs} · ${a.volt} V — <b>${msg}</b>`;
+    }).join('<br>');
+    html += `<div class="banner ${ads.some(a => a.status === 'needed') ? '' : 'info'}">🔌 ${lines}
+      ${anyNeeded && !hasAdapter ? `<br><button class="btn small" style="margin-top:8px" data-act="add-adapter">＋ ${t('addAdapterBtn')}</button>` : ''}</div>`;
   }
   for (const g of groupByCat(list.items)) {
     html += `<div class="cat-section"><div class="cat-head">${catIcon(g.cat)} ${esc(catName(g.cat))} <span class="count">(${g.items.length})</span>
@@ -457,19 +468,24 @@ function fcAddItem(listId, key) {
   saveState();
 }
 
-// Braucht es einen Steckdosen-Adapter? null wenn kein Ziel-Land oder gleiches Land
-function adapterInfo(list) {
+// Braucht es Steckdosen-Adapter? Ein Eintrag pro Ziel-Land (ohne Heimatland)
+function adapterInfos(list) {
   const home = PLUG_COUNTRIES[state.settings.homeCountry];
-  const dest = PLUG_COUNTRIES[list.destCountry];
-  if (!home || !dest || list.destCountry === state.settings.homeCountry) return null;
-  const common = dest.plugs.filter(p => home.plugs.includes(p));
-  const status = !common.length ? 'needed' : (common.length === 1 && common[0] === 'C' ? 'maybe' : 'no');
-  return {
-    status,
-    plugs: dest.plugs.join('/'),
-    volt: dest.volt,
-    country: state.settings.lang === 'en' ? dest.en : dest.de,
-  };
+  if (!home) return [];
+  const codes = list.destCountries || (list.destCountry ? [list.destCountry] : []);
+  return codes
+    .filter(c => PLUG_COUNTRIES[c] && c !== state.settings.homeCountry)
+    .map(c => {
+      const dest = PLUG_COUNTRIES[c];
+      const common = dest.plugs.filter(p => home.plugs.includes(p));
+      const status = !common.length ? 'needed' : (common.length === 1 && common[0] === 'C' ? 'maybe' : 'no');
+      return {
+        status,
+        plugs: dest.plugs.join('/'),
+        volt: dest.volt,
+        country: state.settings.lang === 'en' ? dest.en : dest.de,
+      };
+    });
 }
 
 function cyclePrio(list, id) {
@@ -925,21 +941,43 @@ async function renderSafe() {
   if (!hasSetup) {
     html += `<div class="wiz-title">${t('safeSetupTitle')}</div>
       <div class="banner">${t('safeSetupHint')}</div>
-      <div class="field"><label>${t('passphrase')}</label><input id="sp-1" type="password" autocomplete="new-password"></div>
-      <div class="field"><label>${t('passphraseRepeat')}</label><input id="sp-2" type="password" autocomplete="new-password"></div>
-      <button class="btn" data-act="safe-setup">${t('save')}</button>`;
+      <form id="safe-form" action="#" method="post">
+        <div class="field"><label>${t('safeUser')}</label>
+          <input id="sp-user" type="text" autocomplete="username" value="${esc(state.settings.safeUser || '')}">
+          <div class="wiz-hint" style="margin-top:4px">${t('safeUserHint')}</div></div>
+        <div class="field"><label>${t('passphrase')}</label><input id="sp-1" type="password" autocomplete="new-password"></div>
+        <div class="field"><label>${t('passphraseRepeat')}</label><input id="sp-2" type="password" autocomplete="new-password"></div>
+        <button class="btn" type="submit">${t('save')}</button>
+      </form>`;
     $app.innerHTML = html;
+    document.getElementById('safe-form').addEventListener('submit', e => {
+      e.preventDefault();
+      const p1 = document.getElementById('sp-1').value, p2 = document.getElementById('sp-2').value;
+      if (p1.length < 6) return toast(t('passTooShort'));
+      if (p1 !== p2) return toast(t('passMismatch'));
+      state.settings.safeUser = document.getElementById('sp-user').value.trim();
+      saveState();
+      safeSetup(p1).then(() => render());
+    });
     return;
   }
   if (!safeKey) {
-    html += `<div class="field" style="margin-top:24px"><label>${t('passphrase')}</label>
-      <input id="sp-unlock" type="password" autocomplete="current-password"></div>
-      <button class="btn" data-act="safe-unlock">🔓 ${t('unlock')}</button>
-      <div style="height:30px"></div>
-      <button class="btn danger" data-act="safe-reset">🗑 ${t('safeReset')}</button>`;
+    html += `<form id="safe-form" action="#" method="post" style="margin-top:24px">
+      <input type="text" name="username" autocomplete="username" value="${esc(state.settings.safeUser || '')}" ${state.settings.safeUser ? 'hidden' : `placeholder="${t('safeUser')}" class="field" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:16px;margin-bottom:10px"`}>
+      <div class="field"><label>${t('passphrase')}</label>
+        <input id="sp-unlock" type="password" autocomplete="current-password"></div>
+      <button class="btn" type="submit">🔓 ${t('unlock')}</button>
+      <div class="wiz-hint">${t('passManagerHint')}</div>
+    </form>
+    <div style="height:30px"></div>
+    <button class="btn danger" data-act="safe-reset">🗑 ${t('safeReset')}</button>`;
     $app.innerHTML = html;
-    const inp = document.getElementById('sp-unlock');
-    if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter') document.querySelector('[data-act="safe-unlock"]').click(); });
+    document.getElementById('safe-form').addEventListener('submit', e => {
+      e.preventDefault();
+      safeUnlock(document.getElementById('sp-unlock').value).then(ok => {
+        if (ok) render(); else toast(t('wrongPass'));
+      });
+    });
     return;
   }
 
@@ -959,7 +997,7 @@ async function renderSafe() {
     html += `<div class="cat-section"><div class="cat-head">📄 ${t('documents')}</div>`;
     for (const d of files) {
       const icon = d.type === 'note' ? '📝' : (d.mime && d.mime.startsWith('image/') ? '🖼️' : '📄');
-      html += `<div class="item" data-act="safe-open" data-id="${d.id}" style="cursor:pointer">
+      html += `<div class="item" data-act="${d.type === 'note' ? 'safe-edit' : 'safe-open'}" data-id="${d.id}" style="cursor:pointer">
         <span style="font-size:20px">${icon}</span>
         <div class="name">${esc(d.name)}<br><span style="font-size:12px;color:var(--text-soft)">${new Date(d.created).toLocaleDateString(locale())}${d.type === 'file' ? ' · ' + Math.round(d.size / 1024) + ' KB' : ''}</span></div>
         <button class="del" data-act="safe-del" data-id="${d.id}">✕</button>
@@ -973,11 +1011,11 @@ async function renderSafe() {
       const q = encodeURIComponent(d.address || '');
       html += `<div class="item" style="flex-wrap:wrap">
         <span style="font-size:20px">📍</span>
-        <div class="name">${esc(d.name)}<br><span style="font-size:12px;color:var(--text-soft)">${esc(d.address || '')}</span></div>
+        <div class="name" data-act="safe-edit" data-id="${d.id}" style="cursor:pointer">${esc(d.name)}<br><span style="font-size:12px;color:var(--text-soft)">${esc(d.address || '')}</span></div>
         <button class="del" data-act="safe-del" data-id="${d.id}">✕</button>
         <div style="width:100%;display:flex;gap:8px;margin-top:6px">
-          <a class="btn small secondary" style="flex:1;text-decoration:none" href="https://www.google.com/maps/dir/?api=1&destination=${q}" target="_blank" rel="noopener">🗺️ Google Maps</a>
-          <a class="btn small secondary" style="flex:1;text-decoration:none" href="https://maps.apple.com/?daddr=${q}" target="_blank" rel="noopener"> Apple Maps</a>
+          <a class="btn small secondary" style="flex:1;text-decoration:none" href="https://www.google.com/maps/search/?api=1&query=${q}" target="_blank" rel="noopener">🗺️ Google Maps</a>
+          <a class="btn small secondary" style="flex:1;text-decoration:none" href="https://maps.apple.com/?q=${q}" target="_blank" rel="noopener"> Apple Maps</a>
         </div>
       </div>`;
     }
@@ -992,12 +1030,14 @@ async function renderSafe() {
   });
 }
 
-function safeEntryModal(type) {
-  showModal(`<h3>${type === 'address' ? '📍 ' + t('addAddress') : '📝 ' + t('addNote')}</h3>
-    <div class="field"><label>${t('tileName')}</label><input id="se-name" type="text"></div>
+// Neu anlegen (doc = null) oder bestehenden Eintrag bearbeiten
+function safeEntryModal(type, doc) {
+  const title = doc ? t('editEntry') : (type === 'address' ? t('addAddress') : t('addNote'));
+  showModal(`<h3>${type === 'address' ? '📍' : '📝'} ${title}</h3>
+    <div class="field"><label>${t('tileName')}</label><input id="se-name" type="text" value="${esc(doc ? doc.name : '')}"></div>
     <div class="field"><label>${type === 'address' ? t('addressText') : t('noteText')}</label>
-      <textarea id="se-text" rows="3" placeholder="${type === 'address' ? t('addressPh') : ''}"></textarea></div>
-    <button class="btn" data-act="safe-entry-save" data-key="${type}">${t('save')}</button>
+      <textarea id="se-text" rows="3" placeholder="${type === 'address' ? t('addressPh') : ''}">${esc(doc ? (type === 'address' ? doc.address : doc.text) || '' : '')}</textarea></div>
+    <button class="btn" data-act="safe-entry-save" data-key="${type}" ${doc ? `data-id="${doc.id}"` : ''}>${t('save')}</button>
     <button class="btn secondary" data-act="close-modal">${t('cancel')}</button>`);
 }
 
@@ -1173,6 +1213,19 @@ document.addEventListener('click', e => {
     case 'wiz-climate': toggleArr(wiz.climate, key); render(); break;
     case 'wiz-activity': toggleArr(wiz.activities, key); render(); break;
     case 'wiz-bag': wiz.bagOption = key; render(); break;
+    case 'wiz-country-add': {
+      const sel = document.getElementById('w-country');
+      const dest = document.getElementById('w-dest'), nm = document.getElementById('w-name');
+      wiz.dest = dest.value.trim(); wiz.name = nm.value.trim();
+      if (sel.value && !wiz.destCountries.includes(sel.value)) wiz.destCountries.push(sel.value);
+      render(); break;
+    }
+    case 'wiz-country-del': {
+      const dest = document.getElementById('w-dest'), nm = document.getElementById('w-name');
+      wiz.dest = dest.value.trim(); wiz.name = nm.value.trim();
+      wiz.destCountries = wiz.destCountries.filter(c => c !== key);
+      render(); break;
+    }
     // Kalender
     case 'cal-nav': {
       wizReadDetails();
@@ -1251,18 +1304,6 @@ document.addEventListener('click', e => {
     case 'add-adapter': fcAddItem(view.id, 'adapter'); render(); toast(t('added')); break;
     // Dokumenten-Safe
     case 'safe': go({ name: 'safe' }); break;
-    case 'safe-setup': {
-      const p1 = document.getElementById('sp-1').value, p2 = document.getElementById('sp-2').value;
-      if (p1.length < 6) { toast(t('passTooShort')); break; }
-      if (p1 !== p2) { toast(t('passMismatch')); break; }
-      safeSetup(p1).then(() => render());
-      break;
-    }
-    case 'safe-unlock':
-      safeUnlock(document.getElementById('sp-unlock').value).then(ok => {
-        if (ok) render(); else toast(t('wrongPass'));
-      });
-      break;
     case 'safe-lock': safeLock(); render(); break;
     case 'safe-reset':
       if (confirm(t('safeResetConfirm')) && confirm(t('safeResetConfirm'))) {
@@ -1276,10 +1317,17 @@ document.addEventListener('click', e => {
       const name = document.getElementById('se-name').value.trim();
       const text = document.getElementById('se-text').value.trim();
       if (!name || !text) break;
-      safeAddEntry(key, name, text).then(() => { closeModal(); render(); toast(t('saved')); });
+      const p = id ? safeUpdateEntry(id, key, name, text) : safeAddEntry(key, name, text);
+      p.then(() => { closeModal(); render(); toast(t('saved')); });
       break;
     }
     case 'safe-open': safeOpenDoc(id); break;
+    case 'safe-edit':
+      safeListDocs().then(docs => {
+        const d = docs.find(x => x.id === id);
+        if (d) safeEntryModal(d.type, d);
+      });
+      break;
     case 'safe-del':
       if (confirm(t('deleteDocConfirm'))) safeDelete(id).then(() => render());
       break;

@@ -128,6 +128,17 @@ async function safeAddEntry(type, name, text) {
   safeDocsCache = null;
 }
 
+async function safeUpdateEntry(id, type, name, text) {
+  const d = await safeGet('docs', id);
+  if (!d) return;
+  const m = await safeEncrypt(safeEnc.encode(JSON.stringify(
+    type === 'address' ? { name, address: text } : { name, text }
+  )));
+  d.miv = m.iv; d.mct = m.ct; d.size = text.length;
+  await safeTx('docs', 'readwrite', s => s.put(d));
+  safeDocsCache = null;
+}
+
 async function safeDelete(id) {
   await safeTx('docs', 'readwrite', s => s.delete(id));
   safeDocsCache = null;
